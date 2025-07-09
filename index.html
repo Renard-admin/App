@@ -1,0 +1,2328 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Мой Летний Органайзер</title>
+    <!-- Tailwind CSS CDN для стилизации -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Устанавливаем шрифт Inter для всего тела документа */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Пользовательские стили для таблицы Шульте */
+        .schulte-grid {
+            display: grid;
+            gap: 4px; /* Соответствует Tailwind gap-1 */
+            background-color: #374151; /* Соответствует Tailwind gray-700 */
+            padding: 8px; /* Соответствует Tailwind p-2 */
+            border-radius: 8px; /* Соответствует Tailwind rounded-lg */
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); /* Соответствует Tailwind shadow-lg */
+            border: 2px solid #b45309; /* Соответствует Tailwind border-amber-700 */
+        }
+        .schulte-cell {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8px; /* Соответствует Tailwind p-2 */
+            border-radius: 6px; /* Соответствует Tailwind rounded-md */
+            font-weight: bold; /* Соответствует Tailwind font-bold */
+            font-size: 1.25rem; /* Соответствует Tailwind text-xl */
+            cursor: pointer;
+            transition: all 100ms ease-in-out;
+            background-color: #1f2937; /* Соответствует Tailwind gray-800 */
+            color: #fcd34d; /* Соответствует Tailwind amber-300 */
+            width: 100%;
+            padding-bottom: 100%; /* Делает ячейки квадратными */
+            position: relative;
+        }
+        .schulte-cell span {
+            position: absolute; /* Позиционируем текст абсолютно внутри ячейки */
+        }
+        .schulte-cell:hover {
+            background-color: #4b5563; /* Соответствует Tailwind hover:bg-gray-600 */
+        }
+        .schulte-cell.found {
+            background-color: #047857; /* Соответствует Tailwind bg-green-700 */
+            color: white;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white">
+    <!-- Контейнеры для модальных окон, будут заполняться динамически JS -->
+    <div id="message-modal-container"></div>
+    <div id="ai-modal-container"></div>
+
+    <!-- Экран входа -->
+    <div id="login-screen" class="min-h-screen flex items-center justify-center p-4">
+        <div class="bg-gray-800 p-8 rounded-xl shadow-2xl border-2 border-amber-700 w-full max-w-md text-center">
+            <h2 class="text-3xl font-bold text-amber-400 mb-6">Вход</h2>
+            <div class="mb-4">
+                <input
+                    type="text"
+                    id="login-username"
+                    placeholder="Логин"
+                    class="w-full p-3 rounded-lg bg-gray-700 text-white border border-gray-600 focus:outline-none focus:border-amber-500"
+                />
+            </div>
+            <div class="mb-6">
+                <input
+                    type="password"
+                    id="login-password"
+                    placeholder="Пароль"
+                    class="w-full p-3 rounded-lg bg-gray-700 text-white border border-gray-600 focus:outline-none focus:border-amber-500"
+                />
+            </div>
+            <button
+                id="login-button"
+                class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300 ease-in-out transform hover:scale-105 w-full"
+            >
+                Войти
+            </button>
+            <p id="login-error-message" class="text-red-400 mt-4 hidden">Неверный логин или пароль.</p>
+        </div>
+    </div>
+
+    <!-- Основное приложение (скрыто по умолчанию) -->
+    <div id="main-app-content" class="min-h-screen flex flex-col items-center p-4 sm:p-6 hidden">
+        <!-- Заголовок приложения и отображение ID пользователя -->
+        <div class="w-full max-w-6xl text-center mb-8">
+            <h1 class="text-4xl sm:text-5xl font-bold text-amber-500 mb-2 drop-shadow-lg">
+                Мой Летний Органайзер
+            </h1>
+            <p id="user-id-display" class="text-sm text-gray-400 mt-2 hidden">
+                ID Пользователя: <span class="font-mono break-all" id="user-id-value"></span>
+            </p>
+            <p class="text-sm text-gray-400">
+                Вы вошли как: <span class="font-semibold text-amber-300" id="logged-in-username-display"></span>
+            </p>
+        </div>
+
+        <!-- Навигационные вкладки -->
+        <div id="nav-tabs" class="w-full max-w-6xl flex flex-wrap justify-center gap-2 mb-8 bg-gray-800 rounded-full p-1 shadow-inner">
+            <!-- Кнопки вкладок будут добавлены сюда динамически с помощью JS -->
+        </div>
+
+        <!-- Область контента для активной вкладки -->
+        <div id="content-area" class="w-full max-w-6xl bg-gray-800 p-6 rounded-xl shadow-2xl border-2 border-amber-700">
+            <!-- Содержимое вкладки будет отображаться здесь -->
+        </div>
+
+        <!-- Футер приложения -->
+        <footer class="mt-8 text-gray-500 text-sm text-center">
+            <p>&copy; 2025 Мой Персональный Органайзер. Все права защищены.</p>
+        </footer>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        // Импорт необходимых модулей Firebase
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, query, addDoc, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Глобальные переменные для экземпляров Firebase и состояния приложения
+        let app;
+        let db;
+        let auth;
+        let currentUserId = null; // Firebase UID
+        let loggedInUsername = null; // Логин пользователя (Renard, Ilsiya и т.д.)
+        let isAuthReady = false;
+
+        // Модальное окно для сообщений (замена alert())
+        function showMessageModal(message, onClose) {
+            const container = document.getElementById('message-modal-container');
+            container.innerHTML = `
+                <div class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+                    <div class="bg-gray-800 text-white p-6 rounded-lg shadow-lg max-w-sm w-full text-center border-2 border-amber-500">
+                        <p class="text-lg mb-4">${message}</p>
+                        <button id="message-modal-close" class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-4 rounded-full transition duration-300 ease-in-out transform hover:scale-105">
+                            Закрыть
+                        </button>
+                    </div>
+                </div>
+            `;
+            document.getElementById('message-modal-close').onclick = () => {
+                container.innerHTML = '';
+                if (onClose) onClose();
+            };
+        }
+
+        // Модальное окно для AI-генерируемого контента
+        function showAIModal(title, content, isLoading, onClose) {
+            const container = document.getElementById('ai-modal-container');
+            container.innerHTML = `
+                <div class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+                    <div class="bg-gray-800 text-white p-6 rounded-lg shadow-lg max-w-lg w-full text-center border-2 border-amber-500 relative">
+                        <h3 class="text-2xl font-bold text-amber-400 mb-4">${title}</h3>
+                        ${isLoading ? `
+                            <div class="flex justify-center items-center h-24">
+                                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-500"></div>
+                                <p class="ml-4 text-gray-300">AI генерирует...</p>
+                            </div>
+                        ` : `
+                            <p class="text-lg mb-4 text-left whitespace-pre-wrap">${content}</p>
+                        `}
+                        <button id="ai-modal-close" class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-4 rounded-full transition duration-300 ease-in-out transform hover:scale-105 mt-4">
+                            Закрыть
+                        </button>
+                    </div>
+                </div>
+            `;
+            document.getElementById('ai-modal-close').onclick = () => {
+                container.innerHTML = '';
+                if (onClose) onClose();
+            };
+        }
+
+        // Иконки (SVG для универсальности и стилизации)
+        const icons = {
+            ScheduleIcon: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" class="w-5 h-5 mr-2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>`,
+            ShoppingCartIcon: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" class="w-5 h-5 mr-2"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>`,
+            TargetIcon: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" class="w-5 h-5 mr-2"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>`,
+            BananaIcon: `<span class="text-2xl mr-2">🍌</span>`,
+            BrainIcon: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" class="w-5 h-5 mr-2"><path d="M12 12c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z"></path><path d="M12 12c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6z"></path><path d="M12 12c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z"></path><path d="M12 12c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6-6z"></path></svg>`,
+            FamilyIcon: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" class="w-5 h-5 mr-2"><path d="M16 17a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle><path d="M18 22v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle><path d="M20 22v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>`,
+            HabitsIcon: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" class="w-5 h-5 mr-2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14 9 11"></polyline></svg>`,
+            LearningIcon: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" class="w-5 h-5 mr-2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V6.5A2.5 2.5 0 0 0 17.5 4h-11A2.5 2.5 0 0 0 4 6.5v13z"></path><path d="M12 10.5V17"></path><path d="M9.5 14.5L12 17l2.5-2.5"></path></svg>`,
+            FinanceIcon: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" class="w-5 h-5 mr-2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>`,
+            GamepadIcon: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" class="w-5 h-5 mr-2"><path d="M6 10H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><path d="M18 10h2a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"></path><path d="M10 18v2a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-2"></path><path d="M10 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"></path><rect x="2" y="6" width="20" height="12" rx="4"></rect><path d="M12 10v4"></path><path d="M14 12H10"></path></svg>`,
+            NotebookIcon: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" class="w-5 h-5 mr-2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>`,
+            DeleteIcon: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" class="w-6 h-6"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`
+        };
+
+        // Данные для входа
+        const userCredentials = {
+            "Renard": "121212",
+            "Ilsiya": "1949",
+            "Ramir": "1709",
+            "Riana": "7590"
+        };
+
+        // Расписание для Renard
+        const renardSchedule = {
+            'Понедельник': [
+                { id: 'mon-0730', time: '07:30', activity: 'Разминка (YouTube: MadFit)', type: 'default' },
+                { id: 'mon-0745', time: '07:45', activity: 'Плавание', type: 'default' },
+                { id: 'mon-0800', time: '08:00', activity: 'Душ', type: 'default' },
+                { id: 'mon-0815', time: '08:15', activity: 'Завтрак (каша + фрукты)', type: 'default' },
+                { id: 'mon-0830', time: '08:30', activity: 'Медитация (https://medito.app)', type: 'default' },
+                { id: 'mon-0850', time: '08:50', activity: 'qalan (https://khanacademy.org)', type: 'default' },
+                { id: 'mon-1030', time: '10:30', activity: 'Английский (BBC + Grammarly)', type: 'default' },
+                { id: 'mon-1100', time: '11:00', activity: 'Свободное время', type: 'default' },
+                { id: 'mon-1200', time: '12:00', activity: 'Обед', type: 'default' },
+                { id: 'mon-1300', time: '13:00', activity: 'YouTube развитие', type: 'default' },
+                { id: 'mon-1400', time: '14:00', activity: 'Чтение — «Месяц на пределе»', type: 'default' },
+                { id: 'mon-1500', time: '15:00', activity: 'Школьные темы (https://resh.edu.ru)', type: 'default' },
+                { id: 'mon-1600', time: '16:00', activity: 'Отдых', type: 'default' },
+                { id: 'mon-1740', time: '17:40', activity: 'Качалка: Грудь + бицепс', type: 'default' },
+                { id: 'mon-2130', time: '21:30', activity: 'Ужин, душ', type: 'default' },
+                { id: 'mon-2200', time: '22:00', activity: 'Рефлексия в Notion', type: 'default' },
+                { id: 'mon-2210', time: '22:10', activity: 'Медитация и сон', type: 'default' },
+            ],
+            'Вторник': [
+                { id: 'tue-0730', time: '07:30', activity: 'Разминка', type: 'default' },
+                { id: 'tue-0745', time: '07:45', activity: 'Плавание', type: 'default' },
+                { id: 'tue-0800', time: '08:00', activity: 'Душ', type: 'default' },
+                { id: 'tue-0815', time: '08:15', activity: 'Завтрак', type: 'default' },
+                { id: 'tue-0830', time: '08:30', activity: 'Медитация', type: 'default' },
+                { id: 'tue-0900', time: '09:00', activity: 'qalan', type: 'default' },
+                { id: 'tue-1100', time: '11:00', activity: 'Курсы Morriss (Zoom)', type: 'default' },
+                { id: 'tue-1200', time: '12:00', activity: 'Обед', type: 'default' },
+                { id: 'tue-1230', time: '12:30', activity: 'Английский (https://writeandimprove.com)', type: 'default' },
+                { id: 'tue-1330', time: '13:30', activity: 'Чтение', type: 'default' },
+                { id: 'tue-1430', time: '14:30', activity: 'YouTube развитие', type: 'default' },
+                { id: 'tue-1530', time: '15:30', activity: 'Прогулка / велик', type: 'default' },
+                { id: 'tue-1600', time: '16:00', activity: 'Школьные темы', type: 'default' },
+                { id: 'tue-1730', time: '17:30', activity: 'Отдых', type: 'default' },
+                { id: 'tue-1930', time: '19:30', activity: 'Ужин, душ', type: 'default' },
+                { id: 'tue-2000', time: '20:00', activity: 'Рефлексия и расслабление', type: 'default' },
+                { id: 'tue-2100', time: '21:00', activity: 'Медитация и сон', type: 'default' },
+            ],
+            'Суббота': [
+                { id: 'sat-0730', time: '07:30', activity: 'Разминка', type: 'default' },
+                { id: 'sat-0745', time: '07:45', activity: 'Плавание', type: 'default' },
+                { id: 'sat-0800', time: '08:00', activity: 'Душ', type: 'default' },
+                { id: 'sat-0815', time: '08:15', activity: 'Завтрак', type: 'default' },
+                { id: 'sat-0830', time: '08:30', activity: 'Медитация', type: 'default' },
+                { id: 'sat-0900', time: '09:00', activity: 'qalan', type: 'default' },
+                { id: 'sat-1200', time: '12:00', activity: 'Курсы Morriss', type: 'default' },
+                { id: 'sat-1400', time: '14:00', activity: 'Английский Speaking (https://elllo.org)', type: 'default' },
+                { id: 'sat-1530', time: '15:30', activity: 'Чтение / философия', type: 'default' },
+                { id: 'sat-1700', time: '17:00', activity: 'Прогулка с друзьями', type: 'default' },
+                { id: 'sat-1900', time: '19:00', activity: 'Подготовка и баня', type: 'default' },
+                { id: 'sat-2100', time: '21:00', activity: 'Отдых', type: 'default' },
+            ],
+            'Воскресенье': [
+                { id: 'sun-0730', time: '07:30', activity: 'Разминка', type: 'default' },
+                { id: 'sun-0745', time: '07:45', activity: 'Плавание', type: 'default' },
+                { id: 'sun-0800', time: '08:00', activity: 'Душ', type: 'default' },
+                { id: 'sun-0815', time: '08:15', activity: 'Завтрак', type: 'default' },
+                { id: 'sun-0830', time: '08:30', activity: 'Медитация', type: 'default' },
+                { id: 'sun-0830-2', time: '08:30', activity: 'Уборка двора', type: 'default' },
+                { id: 'sun-1030', time: '10:30', activity: 'Вынос мусора', type: 'default' },
+                { id: 'sun-1130', time: '11:30', activity: 'Повторение школьных тем', type: 'default' },
+                { id: 'sun-1400', time: '14:00', activity: 'FLEX Essay (https://perfect-english-grammar.com)', type: 'default' },
+                { id: 'sun-1500', time: '15:00', activity: 'Прогулка', type: 'default' },
+                { id: 'sun-1800', time: '18:00', activity: 'Время с семьёй', type: 'default' },
+                { id: 'sun-2000', time: '20:00', activity: 'Медитация и сон', type: 'default' },
+            ],
+        };
+
+        // Копируем и изменяем расписание для Среды, Четверга и Пятницы на основе Понедельника/Вторника
+        renardSchedule['Среда'] = JSON.parse(JSON.stringify(renardSchedule['Понедельник']));
+        const wednesdayActivity = renardSchedule['Среда'].find(e => e.activity.includes('Качалка'));
+        if (wednesdayActivity) wednesdayActivity.activity = 'Качалка: Спина + трицепс';
+
+        renardSchedule['Пятница'] = JSON.parse(JSON.stringify(renardSchedule['Понедельник']));
+        const fridayActivity = renardSchedule['Пятница'].find(e => e.activity.includes('Качалка'));
+        if (fridayActivity) fridayActivity.activity = 'Качалка: Плечи + пресс';
+
+        renardSchedule['Четверг'] = JSON.parse(JSON.stringify(renardSchedule['Вторник']));
+
+        // Дефолтные данные для каждого пользователя
+        const defaultUserAppData = {
+            "Renard": {
+                schedule: renardSchedule,
+                shoppingList: [],
+                goals: [],
+                bananaCount: 0,
+                familyActivities: [],
+                dailyHabits: [],
+                learningSubjects: [],
+                transactions: [],
+                notes: [],
+            },
+            "Ilsiya": {
+                schedule: {},
+                shoppingList: [],
+                goals: [],
+                bananaCount: 0,
+                familyActivities: [],
+                dailyHabits: [],
+                learningSubjects: [],
+                transactions: [],
+                notes: [],
+            },
+            "Ramir": {
+                schedule: {},
+                shoppingList: [],
+                goals: [],
+                bananaCount: 0,
+                familyActivities: [],
+                dailyHabits: [],
+                learningSubjects: [],
+                transactions: [],
+                notes: [],
+            },
+            "Riana": {
+                schedule: {},
+                shoppingList: [],
+                goals: [],
+                bananaCount: 0,
+                familyActivities: [],
+                dailyHabits: [],
+                learningSubjects: [],
+                transactions: [],
+                notes: [],
+            }
+        };
+
+        // Основные данные приложения (будут загружены для текущего пользователя)
+        let appState = {
+            schedule: {},
+            shoppingList: [],
+            goals: [],
+            bananaCount: 0,
+            familyActivities: [],
+            dailyHabits: [],
+            learningSubjects: [],
+            transactions: [],
+            notes: [],
+        };
+        let activeTab = 'schedule'; // Активная вкладка по умолчанию
+
+        // Функция для сохранения данных в Firestore
+        async function saveData(dataToSave) {
+            if (db && currentUserId && loggedInUsername) {
+                try {
+                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                    // Путь к документу профиля конкретного пользователя
+                    const userProfileDocRef = doc(db, `artifacts/${appId}/users/${currentUserId}/profiles/${loggedInUsername}`);
+                    await setDoc(userProfileDocRef, dataToSave, { merge: true });
+                } catch (e) {
+                    console.error("Ошибка при сохранении данных:", e);
+                    showMessageModal("Ошибка сохранения данных. Попробуйте снова.");
+                }
+            } else {
+                console.warn("Не удалось сохранить данные: пользователь не авторизован или логин не установлен.");
+            }
+        }
+
+        // Функция для загрузки данных из Firestore
+        function loadData() {
+            if (db && currentUserId && loggedInUsername && isAuthReady) {
+                const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                const userProfileDocRef = doc(db, `artifacts/${appId}/users/${currentUserId}/profiles/${loggedInUsername}`);
+
+                onSnapshot(userProfileDocRef, (docSnap) => {
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        // Обновляем appState, используя загруженные данные
+                        Object.assign(appState, {
+                            schedule: data.schedule || defaultUserAppData[loggedInUsername].schedule,
+                            shoppingList: data.shoppingList || [],
+                            goals: data.goals || [],
+                            bananaCount: data.bananaCount || 0,
+                            familyActivities: data.familyActivities || [],
+                            dailyHabits: data.dailyHabits || [],
+                            learningSubjects: data.learningSubjects || [],
+                            transactions: data.transactions || [],
+                            notes: data.notes || [],
+                        });
+                        renderApp(); // Перерисовываем приложение с загруженными данными
+                    } else {
+                        // Если документа профиля нет, создаем его с дефолтными данными для этого пользователя
+                        const initialData = defaultUserAppData[loggedInUsername];
+                        setDoc(userProfileDocRef, initialData)
+                            .then(() => {
+                                Object.assign(appState, initialData);
+                                renderApp();
+                            })
+                            .catch(e => console.error("Ошибка при создании документа профиля пользователя:", e));
+                    }
+                }, (error) => {
+                    console.error("Ошибка при получении данных из Firestore:", error);
+                    showMessageModal("Ошибка загрузки данных. Проверьте подключение.");
+                });
+            }
+        }
+
+        // --- Функции для управления данными приложения (реплицированы из React App.js) ---
+
+        // Расписание
+        function addEventToSchedule(day, time, activity, type = 'custom') {
+            const newEvent = { id: Date.now(), time, activity, type };
+            const updatedScheduleDay = [...(appState.schedule[day] || []), newEvent];
+            appState.schedule = { ...appState.schedule, [day]: updatedScheduleDay };
+            saveData({ schedule: appState.schedule });
+            renderScheduleTab(); // Перерисовываем только вкладку расписания
+        }
+
+        function updateScheduleEvent(day, eventId, newActivity) {
+            const updatedScheduleDay = (appState.schedule[day] || []).map(event =>
+                event.id === eventId ? { ...event, activity: newActivity } : event
+            );
+            appState.schedule = { ...appState.schedule, [day]: updatedScheduleDay };
+            saveData({ schedule: appState.schedule });
+            renderScheduleTab();
+        }
+
+        function removeScheduleEvent(day, eventId) {
+            const updatedScheduleDay = (appState.schedule[day] || []).filter(event => event.id !== eventId);
+            appState.schedule = { ...appState.schedule, [day]: updatedScheduleDay };
+            saveData({ schedule: appState.schedule });
+            renderScheduleTab();
+        }
+
+        // Список покупок
+        function addShoppingItem(item) {
+            const newShoppingList = [...appState.shoppingList, { id: Date.now(), ...item, completed: false }];
+            appState.shoppingList = newShoppingList;
+            saveData({ shoppingList: newShoppingList });
+            renderShoppingTab();
+        }
+        function toggleShoppingItem(id) {
+            const newShoppingList = appState.shoppingList.map(item =>
+                item.id === id ? { ...item, completed: !item.completed } : item
+            );
+            appState.shoppingList = newShoppingList;
+            saveData({ shoppingList: newShoppingList });
+            renderShoppingTab();
+        }
+        function removeShoppingItem(id) {
+            const newShoppingList = appState.shoppingList.filter(item => item.id !== id);
+            appState.shoppingList = newShoppingList;
+            saveData({ shoppingList: newShoppingList });
+            renderShoppingTab();
+        }
+
+        // Цели
+        function addGoal(goalText) {
+            if (goalText.trim()) {
+                const newGoals = [...appState.goals, { id: Date.now(), text: goalText, completed: false }];
+                appState.goals = newGoals;
+                saveData({ goals: newGoals });
+                renderGoalsTab();
+            }
+        }
+        function toggleGoal(id) {
+            const newGoals = appState.goals.map(goal =>
+                goal.id === id ? { ...goal, completed: !goal.completed } : goal
+            );
+            appState.goals = newGoals;
+            saveData({ goals: newGoals });
+            renderGoalsTab();
+        }
+        function removeGoal(id) {
+            const newGoals = appState.goals.filter(goal => goal.id !== id);
+            appState.goals = newGoals;
+            saveData({ goals: newGoals });
+            renderGoalsTab();
+        }
+
+        // Счетчик бананов
+        function incrementBanana() {
+            appState.bananaCount += 1;
+            saveData({ bananaCount: appState.bananaCount });
+            renderShoppingTab(); // Перерисовываем для обновления счетчика
+        }
+        function decrementBanana() {
+            appState.bananaCount = Math.max(0, appState.bananaCount - 1);
+            saveData({ bananaCount: appState.bananaCount });
+            renderShoppingTab(); // Перерисовываем для обновления счетчика
+        }
+
+        // Семейные мероприятия
+        function addFamilyActivity(activity) {
+            const newActivities = [...appState.familyActivities, { id: Date.now(), ...activity }];
+            appState.familyActivities = newActivities;
+            saveData({ familyActivities: newActivities });
+            renderFamilyTimeTab();
+            addEventToSchedule(activity.day, activity.time, `Семья: ${activity.text}`, 'family');
+        }
+        function removeFamilyActivity(id, day, time, activityText) {
+            const newActivities = appState.familyActivities.filter(activity => activity.id !== id);
+            appState.familyActivities = newActivities;
+            saveData({ familyActivities: newActivities });
+            renderFamilyTimeTab();
+            // Удаляем соответствующее событие из расписания
+            removeScheduleEvent(day, (appState.schedule[day] || []).find(e => e.time === time && e.activity === activityText && e.type === 'family')?.id);
+        }
+
+        // Ежедневные привычки
+        function addDailyHabit(habit) {
+            const newHabits = [...appState.dailyHabits, { id: Date.now(), ...habit, completed: false }];
+            appState.dailyHabits = newHabits;
+            saveData({ dailyHabits: newHabits });
+            renderDailyHabitsTab();
+            addEventToSchedule(habit.day, habit.time, `Привычка: ${habit.text}`, 'habit');
+        }
+        function toggleDailyHabit(id) {
+            const newHabits = appState.dailyHabits.map(habit =>
+                habit.id === id ? { ...habit, completed: !habit.completed } : habit
+            );
+            appState.dailyHabits = newHabits;
+            saveData({ dailyHabits: newHabits });
+            renderDailyHabitsTab();
+        }
+        function removeDailyHabit(id, day, time, activityText) {
+            const newHabits = appState.dailyHabits.filter(habit => habit.id !== id);
+            appState.dailyHabits = newHabits;
+            saveData({ dailyHabits: newHabits });
+            renderDailyHabitsTab();
+            // Удаляем соответствующее событие из расписания
+            removeScheduleEvent(day, (appState.schedule[day] || []).find(e => e.time === time && e.activity === activityText && e.type === 'habit')?.id);
+        }
+
+        // Прогресс в обучении
+        function addLearningSubject(subject) {
+            const newSubjects = [...appState.learningSubjects, { id: Date.now(), ...subject, progress: 0 }];
+            appState.learningSubjects = newSubjects;
+            saveData({ learningSubjects: newSubjects });
+            renderLearningProgressTab();
+            addEventToSchedule(subject.day, subject.time, `Обучение: ${subject.text}`, 'learning');
+        }
+        function updateLearningSubjectProgress(id, progress) {
+            const newSubjects = appState.learningSubjects.map(subject =>
+                subject.id === id ? { ...subject, progress: progress } : subject
+            );
+            appState.learningSubjects = newSubjects;
+            saveData({ learningSubjects: newSubjects });
+            renderLearningProgressTab();
+        }
+        function removeLearningSubject(id, day, time, activityText) {
+            const newSubjects = appState.learningSubjects.filter(subject => subject.id !== id);
+            appState.learningSubjects = newSubjects;
+            saveData({ learningSubjects: newSubjects });
+            renderLearningProgressTab();
+            // Удаляем соответствующее событие из расписания
+            removeScheduleEvent(day, (appState.schedule[day] || []).find(e => e.time === time && e.activity === activityText && e.type === 'learning')?.id);
+        }
+
+        // Финансы
+        function addTransaction(transaction) {
+            const newTransactions = [...appState.transactions, { id: Date.now(), ...transaction, date: new Date().toLocaleDateString() }];
+            appState.transactions = newTransactions;
+            saveData({ transactions: newTransactions });
+            renderFinanceTab();
+        }
+        function removeTransaction(id) {
+            const newTransactions = appState.transactions.filter(t => t.id !== id);
+            appState.transactions = newTransactions;
+            saveData({ transactions: newTransactions });
+            renderFinanceTab();
+        }
+
+        // Заметки
+        function addNote(text) {
+            if (text.trim()) {
+                const newNotes = [...appState.notes, { id: Date.now(), text, timestamp: Date.now() }];
+                appState.notes = newNotes;
+                saveData({ notes: newNotes });
+                renderNotebookTab();
+            }
+        }
+        function removeNote(id) {
+            const newNotes = appState.notes.filter(note => note.id !== id);
+            appState.notes = newNotes;
+            saveData({ notes: newNotes });
+            renderNotebookTab();
+        }
+
+        // Уведомления
+        function checkNotifications() {
+            const now = new Date();
+            const currentDay = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'][now.getDay()];
+            const currentHour = now.getHours().toString().padStart(2, '0');
+            const currentMinute = now.getMinutes().toString().padStart(2, '0');
+            const currentTime = `${currentHour}:${currentMinute}`;
+
+            const eventsToday = appState.schedule[currentDay] || [];
+
+            eventsToday.forEach(event => {
+                // Простая логика: уведомление за 10 минут до события
+                const eventTimeParts = event.time.split(':').map(Number);
+                const eventHour = eventTimeParts[0];
+                const eventMinute = eventTimeParts[1];
+
+                const eventDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), eventHour, eventMinute, 0);
+                const diffMinutes = Math.floor((eventDate.getTime() - now.getTime()) / (1000 * 60));
+
+                if (diffMinutes === 10) { // Уведомление за 10 минут
+                    showMessageModal(`Напоминание: Через 10 минут у тебя "${event.activity}" в ${event.time}!`);
+                }
+            });
+        }
+
+        // --- Функции рендеринга вкладок ---
+
+        function renderScheduleTab() {
+            const contentArea = document.getElementById('content-area');
+            let selectedDay = 'Понедельник'; // День по умолчанию для отображения
+
+            const daysOfWeek = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'];
+
+            // Вспомогательная функция для рендеринга содержимого расписания для конкретного дня
+            const renderDayContent = (day) => {
+                const sortedEvents = (appState.schedule[day] || []).sort((a, b) => {
+                    const timeA = a.time.split(':').map(Number);
+                    const timeB = b.time.split(':').map(Number);
+                    if (timeA[0] !== timeB[0]) return timeA[0] - timeB[0];
+                    return timeA[1] - timeB[1];
+                });
+
+                return `
+                    <div class="bg-gray-700 p-6 rounded-lg shadow-md border border-gray-600">
+                        <h3 class="text-2xl font-bold text-amber-300 mb-4 text-center">События на ${day}</h3>
+                        ${sortedEvents.length === 0 ? `
+                            <p class="text-gray-400 text-center">На этот день пока нет событий.</p>
+                        ` : `
+                            <ul class="space-y-3">
+                                ${sortedEvents.map(event => `
+                                    <li class="flex items-center justify-between bg-gray-800 p-4 rounded-lg shadow-inner border border-gray-700">
+                                        <div>
+                                            <span class="text-lg font-semibold text-amber-300">${event.time}</span>
+                                            <span class="ml-3 text-gray-200">${event.activity}</span>
+                                            ${event.type !== 'default' ? `
+                                                <span class="ml-2 px-2 py-1 text-xs font-medium rounded-full bg-gray-600 text-gray-300">
+                                                    ${event.type === 'family' ? 'Семья' : event.type === 'habit' ? 'Привычка' : 'Обучение'}
+                                                </span>
+                                            ` : ''}
+                                        </div>
+                                        <button data-id="${event.id}" data-day="${day}" class="remove-schedule-event ml-4 text-red-400 hover:text-red-600 transition-colors duration-200">
+                                            ${icons.DeleteIcon}
+                                        </button>
+                                    </li>
+                                `).join('')}
+                            </ul>
+                        `}
+                    </div>
+                `;
+            };
+
+            contentArea.innerHTML = `
+                <div class="p-4">
+                    <h2 class="text-3xl font-bold text-amber-400 mb-6 text-center">Мое Расписание</h2>
+                    <p class="text-gray-300 mb-6 text-center">
+                        Здесь ты можешь видеть свой план на каждый день. События из других вкладок также будут отображаться здесь.
+                    </p>
+
+                    <div class="mb-6 flex flex-wrap justify-center gap-2" id="schedule-day-selector">
+                        ${daysOfWeek.map(day => `
+                            <button
+                                data-day="${day}"
+                                class="py-2 px-4 rounded-full font-semibold transition-all duration-200 ease-in-out
+                                    ${selectedDay === day ? 'bg-amber-600 text-white shadow-md' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}
+                            ">
+                                ${day}
+                            </button>
+                        `).join('')}
+                    </div>
+
+                    <div class="bg-gray-700 p-6 rounded-lg shadow-md border border-gray-600 mb-8">
+                        <h3 class="text-2xl font-bold text-amber-300 mb-4 text-center">Добавить новое событие</h3>
+                        <div class="flex flex-col sm:flex-row gap-4 mb-4">
+                            <input
+                                type="time"
+                                id="new-event-time"
+                                class="w-full sm:w-1/3 p-3 rounded-lg bg-gray-800 text-white border border-gray-600 focus:outline-none focus:border-amber-500"
+                            />
+                            <input
+                                type="text"
+                                placeholder="Описание события"
+                                id="new-event-description"
+                                class="flex-grow p-3 rounded-lg bg-gray-800 text-white border border-gray-600 focus:outline-none focus:border-amber-500"
+                            />
+                            <button
+                                id="add-event-button"
+                                class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300 ease-in-out transform hover:scale-105"
+                            >
+                                Добавить
+                            </button>
+                        </div>
+                        <h3 class="text-2xl font-bold text-amber-300 mb-4 text-center mt-6">Оптимизировать с AI</h3>
+                        <div class="flex flex-col sm:flex-row gap-4">
+                            <textarea
+                                placeholder="Опишите задачи и их продолжительность (например, 'учеба 3 часа, спорт 1 час')"
+                                id="schedule-prompt"
+                                class="flex-grow p-3 rounded-lg bg-gray-800 text-white border border-gray-600 focus:outline-none focus:border-amber-500 h-24 resize-y"
+                            ></textarea>
+                            <button
+                                id="generate-schedule-suggestions"
+                                class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                ✨ Оптимизировать расписание
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="current-day-schedule-content">
+                        ${renderDayContent(selectedDay)}
+                    </div>
+                </div>
+            `;
+
+            // Добавляем слушатели событий
+            document.getElementById('schedule-day-selector').querySelectorAll('button').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    selectedDay = e.target.dataset.day;
+                    // Обновляем стили активной кнопки
+                    document.getElementById('schedule-day-selector').querySelectorAll('button').forEach(btn => {
+                        btn.classList.remove('bg-amber-600', 'text-white', 'shadow-md');
+                        btn.classList.add('bg-gray-700', 'text-gray-300', 'hover:bg-gray-600');
+                    });
+                    e.target.classList.add('bg-amber-600', 'text-white', 'shadow-md');
+                    e.target.classList.remove('bg-gray-700', 'text-gray-300', 'hover:bg-gray-600');
+
+                    document.getElementById('current-day-schedule-content').innerHTML = renderDayContent(selectedDay);
+                    addScheduleEventListeners(); // Повторно добавляем слушатели для нового контента
+                });
+            });
+
+            const addScheduleEventListeners = () => {
+                document.getElementById('add-event-button').onclick = () => {
+                    const time = document.getElementById('new-event-time').value;
+                    const description = document.getElementById('new-event-description').value;
+                    addEventToSchedule(selectedDay, time, description);
+                    document.getElementById('new-event-time').value = '';
+                    document.getElementById('new-event-description').value = '';
+                };
+                document.getElementById('new-event-description').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        document.getElementById('add-event-button').click();
+                    }
+                });
+
+                document.querySelectorAll('.remove-schedule-event').forEach(button => {
+                    button.onclick = (e) => {
+                        const eventId = parseInt(e.currentTarget.dataset.id);
+                        const day = e.currentTarget.dataset.day;
+                        removeScheduleEvent(day, eventId);
+                    };
+                });
+
+                document.getElementById('generate-schedule-suggestions').onclick = async () => {
+                    const promptText = document.getElementById('schedule-prompt').value;
+                    if (!promptText.trim()) {
+                        showMessageModal("Пожалуйста, введите описание задач для расписания.");
+                        return;
+                    }
+                    const generateButton = document.getElementById('generate-schedule-suggestions');
+                    generateButton.disabled = true;
+                    generateButton.textContent = 'Генерация...';
+                    showAIModal('Предложенное расписание', '', true);
+
+                    try {
+                        const prompt = `Предложи оптимальное расписание на один день, учитывая следующие задачи и их примерную продолжительность: "${promptText}". Разбей расписание на временные блоки с указанием активности.`;
+                        const chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
+                        const payload = { contents: chatHistory };
+                        const apiKey = ""; // Этот ключ будет предоставлен Canvas во время выполнения
+                        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                        const response = await fetch(apiUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+
+                        const result = await response.json();
+                        if (result.candidates && result.candidates.length > 0 &&
+                            result.candidates[0].content && result.candidates[0].content.parts &&
+                            result.candidates[0].content.parts.length > 0) {
+                            showAIModal('Предложенное расписание', result.candidates[0].content.parts[0].text, false);
+                        } else {
+                            console.error("Ошибка при получении расписания от AI:", result);
+                            showAIModal('Предложенное расписание', "Не удалось сгенерировать расписание. Попробуйте перефразировать задачи.", false);
+                        }
+                    } catch (error) {
+                        console.error("Ошибка сети при запросе к AI:", error);
+                        showAIModal('Предложенное расписание', "Ошибка сети. Проверьте подключение.", false);
+                    } finally {
+                        generateButton.disabled = false;
+                        generateButton.textContent = '✨ Оптимизировать расписание';
+                    }
+                };
+            };
+            addScheduleEventListeners(); // Изначальные слушатели
+        }
+
+        function renderShoppingTab() {
+            const contentArea = document.getElementById('content-area');
+            contentArea.innerHTML = `
+                <div>
+                    <h2 class="text-3xl font-bold text-amber-400 mb-6 text-center">Список Покупок</h2>
+
+                    <div class="flex flex-col items-center justify-center p-6 bg-gray-700 rounded-lg shadow-md border border-gray-600 mb-8">
+                        <p class="text-xl text-gray-200 mb-4">Количество съеденных бананов:</p>
+                        <div class="flex items-center space-x-4">
+                            <button id="decrement-banana" class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-5 rounded-full text-2xl transition duration-300 ease-in-out transform hover:scale-105">
+                                -
+                            </button>
+                            <span id="banana-count" class="text-5xl font-bold text-amber-400">${appState.bananaCount}</span>
+                            <button id="increment-banana" class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-5 rounded-full text-2xl transition duration-300 ease-in-out transform hover:scale-105">
+                                +
+                            </button>
+                        </div>
+                        <p class="text-gray-400 mt-4 text-center">
+                            Здесь ты можешь отслеживать количество съеденных бананов.
+                        </p>
+                    </div>
+
+                    <div class="p-6 bg-gray-700 rounded-lg shadow-md border border-gray-600 mb-8">
+                        <h3 class="text-2xl font-bold text-amber-300 mb-4 text-center">Добавить продукт (с AI инфо)</h3>
+                        <div class="flex flex-col sm:flex-row gap-4 mb-4">
+                            <input
+                                type="text"
+                                placeholder="Название продукта (например, 'яблоко')"
+                                id="product-name"
+                                class="flex-grow p-3 rounded-lg bg-gray-800 text-white border border-gray-600 focus:outline-none focus:border-amber-500"
+                            />
+                            <input
+                                type="text"
+                                placeholder="Количество (например, '2 шт')"
+                                id="product-quantity"
+                                class="w-full sm:w-1/4 p-3 rounded-lg bg-gray-800 text-white border border-gray-600 focus:outline-none focus:border-amber-500"
+                            />
+                            <input
+                                type="text"
+                                placeholder="Цена (опционально)"
+                                id="product-price"
+                                class="w-full sm:w-1/4 p-3 rounded-lg bg-gray-800 text-white border border-gray-600 focus:outline-none focus:border-amber-500"
+                            />
+                            <button
+                                id="add-product-with-ai"
+                                class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                Добавить
+                            </button>
+                        </div>
+                        <div id="loading-product-info" class="text-center text-gray-400 mt-4 hidden">
+                            Загрузка информации, изображения и цены... Это может занять некоторое время.
+                        </div>
+                    </div>
+
+                    <div class="p-6 bg-gray-700 rounded-lg shadow-md border border-gray-600 mb-8">
+                        <h3 class="text-2xl font-bold text-amber-300 mb-4 text-center">Предложить рецепты с AI</h3>
+                        <button
+                            id="generate-recipe-suggestions"
+                            class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300 ease-in-out transform hover:scale-105 w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            ✨ Предложить рецепты
+                        </button>
+                    </div>
+
+                    ${appState.shoppingList.length === 0 ? `
+                        <p class="text-gray-400 text-center">Список покупок пуст.</p>
+                    ` : `
+                        <ul class="space-y-4" id="shopping-list-items">
+                            ${appState.shoppingList.map(item => `
+                                <li class="flex flex-col sm:flex-row items-center sm:items-start justify-between bg-gray-700 p-4 rounded-lg shadow-md border border-gray-600">
+                                    <div class="flex items-center flex-grow mb-4 sm:mb-0">
+                                        <input
+                                            type="checkbox"
+                                            data-id="${item.id}"
+                                            ${item.completed ? 'checked' : ''}
+                                            class="toggle-shopping-item form-checkbox h-5 w-5 text-amber-600 rounded border-gray-500 bg-gray-800 focus:ring-amber-500 mr-3 cursor-pointer"
+                                        />
+                                        <img
+                                            src="${item.image}"
+                                            alt="${item.name}"
+                                            class="w-20 h-20 object-contain rounded-lg border border-gray-600 shadow-sm mr-4"
+                                            onerror="this.onerror=null;this.src='https://placehold.co/80x80/374151/D1D5DB?text=No+Image';"
+                                        />
+                                        <div class="flex-grow">
+                                            <span class="text-xl font-semibold ${item.completed ? 'line-through text-gray-500' : 'text-amber-300'}">
+                                                ${item.name}
+                                            </span>
+                                            <p class="text-md text-gray-300 ${item.completed ? 'line-through text-gray-400' : ''}">
+                                                Кол-во: ${item.quantity}
+                                                ${item.price ? `<span class="ml-2 text-amber-200">Цена: ${item.price}</span>` : ''}
+                                            </p>
+                                            <p class="text-sm text-green-400 mt-1">Польза: ${item.benefits}</p>
+                                            <p class="text-sm text-red-400">Вред: ${item.harms}</p>
+                                        </div>
+                                    </div>
+                                    <button data-id="${item.id}" class="remove-shopping-item ml-0 sm:ml-4 text-red-400 hover:text-red-600 transition-colors duration-200">
+                                        ${icons.DeleteIcon}
+                                    </button>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    `}
+                </div>
+            `;
+
+            // Добавляем слушатели событий
+            document.getElementById('increment-banana').onclick = incrementBanana;
+            document.getElementById('decrement-banana').onclick = decrementBanana;
+
+            document.getElementById('add-product-with-ai').onclick = async () => {
+                const productName = document.getElementById('product-name').value;
+                const quantity = document.getElementById('product-quantity').value;
+                const price = document.getElementById('product-price').value;
+                const addButton = document.getElementById('add-product-with-ai');
+                const loadingDiv = document.getElementById('loading-product-info');
+
+                if (!productName.trim()) {
+                    showMessageModal("Пожалуйста, введите название продукта.");
+                    return;
+                }
+
+                addButton.disabled = true;
+                loadingDiv.classList.remove('hidden');
+
+                let generatedImage = null;
+                let generatedText = null;
+                let suggestedPrice = price;
+
+                try {
+                    // Генерация изображения
+                    addButton.textContent = 'Генерация изображения...';
+                    const imagePrompt = `A high-quality, realistic photo of ${productName} on a clean white background. Studio lighting, isolated object.`;
+                    const imagePayload = { instances: { prompt: imagePrompt }, parameters: { "sampleCount": 1 } };
+                    const apiKey = ""; // Этот ключ будет предоставлен Canvas во время выполнения
+                    const imageUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
+
+                    const imageResponse = await fetch(imageUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(imagePayload)
+                    });
+                    const imageResult = await imageResponse.json();
+                    if (imageResult.predictions && imageResult.predictions.length > 0 && imageResult.predictions[0].bytesBase64Encoded) {
+                        generatedImage = `data:image/png;base64,${imageResult.predictions[0].bytesBase64Encoded}`;
+                    } else {
+                        console.error("Ошибка при генерации изображения:", imageResult);
+                        showMessageModal("Не удалось сгенерировать изображение продукта.");
+                    }
+                } catch (error) {
+                    console.error("Ошибка при запросе изображения:", error);
+                    showMessageModal("Ошибка сети при генерации изображения. Попробуйте снова.");
+                }
+
+                try {
+                    // Генерация текста (польза и вред)
+                    addButton.textContent = 'Получение инфо...';
+                    const textPrompt = `Предоставь краткую информацию о пользе и вреде продукта "${productName}". Формат: "Польза: [список]. Вред: [список]."`;
+                    const chatHistory = [{ role: "user", parts: [{ text: textPrompt }] }];
+                    const textPayload = { contents: chatHistory };
+                    const apiKey = ""; // Этот ключ будет предоставлен Canvas во время выполнения
+                    const textUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                    const textResponse = await fetch(textUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(textPayload)
+                    });
+                    const textResult = await textResponse.json();
+                    if (textResult.candidates && textResult.candidates.length > 0 &&
+                        textResult.candidates[0].content && textResult.candidates[0].content.parts &&
+                        textResult.candidates[0].content.parts.length > 0) {
+                        generatedText = textResult.candidates[0].content.parts[0].text;
+                    } else {
+                        console.error("Ошибка при генерации текста:", textResult);
+                        showMessageModal("Не удалось получить информацию о продукте.");
+                    }
+                } catch (error) {
+                    console.error("Ошибка при запросе текста:", error);
+                    showMessageModal("Ошибка сети при получении информации. Попробуйте снова.");
+                }
+
+                if (!suggestedPrice) {
+                    addButton.textContent = 'Получение цены...';
+                    try {
+                        const pricePrompt = `Какова примерная цена "${productName}" в тенге? Укажи только числовое значение.`;
+                        const chatHistoryPrice = [{ role: "user", parts: [{ text: pricePrompt }] }];
+                        const pricePayload = { contents: chatHistoryPrice };
+                        const apiKey = ""; // Этот ключ будет предоставлен Canvas во время выполнения
+                        const priceUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                        const priceResponse = await fetch(priceUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(pricePayload)
+                        });
+                        const priceResult = await priceResponse.json();
+                        if (priceResult.candidates && priceResult.candidates.length > 0 &&
+                            priceResult.candidates[0].content && priceResult.candidates[0].content.parts &&
+                            priceResult.candidates[0].content.parts.length > 0) {
+                            const rawPrice = priceResult.candidates[0].content.parts[0].text;
+                            const numericPrice = parseFloat(rawPrice.replace(/[^0-9.,]/g, '').replace(',', '.'));
+                            if (!isNaN(numericPrice)) {
+                                suggestedPrice = `${numericPrice.toFixed(2)} KZT (предполагаемая AI)`;
+                            } else {
+                                suggestedPrice = "Цена не найдена (AI)";
+                            }
+                        } else {
+                            suggestedPrice = "Цена не найдена (AI)";
+                        }
+                    } catch (error) {
+                        console.error("Ошибка при запросе цены AI:", error);
+                        suggestedPrice = "Ошибка получения цены (AI)";
+                    }
+                }
+
+                if (generatedImage || generatedText || suggestedPrice) {
+                    let benefits = "Информация недоступна.";
+                    let harms = "Информация недоступна.";
+                    if (generatedText) {
+                        const benefitMatch = generatedText.match(/Польза:\s*([^.]+)\./i);
+                        const harmMatch = generatedText.match(/Вред:\s*([^.]+)\./i);
+                        if (benefitMatch && benefitMatch[1]) {
+                            benefits = benefitMatch[1].trim();
+                        }
+                        if (harmMatch && harmMatch[1]) {
+                            harms = harmMatch[1].trim();
+                        }
+                    }
+                    addShoppingItem({
+                        name: productName,
+                        quantity: quantity || '1 шт.',
+                        price: suggestedPrice || 'Не указана',
+                        image: generatedImage || 'https://placehold.co/150x150/374151/D1D5DB?text=No+Image',
+                        benefits: benefits,
+                        harms: harms,
+                    });
+                    document.getElementById('product-name').value = '';
+                    document.getElementById('product-quantity').value = '';
+                    document.getElementById('product-price').value = '';
+                }
+                addButton.disabled = false;
+                addButton.textContent = 'Добавить';
+                loadingDiv.classList.add('hidden');
+            };
+
+            document.getElementById('generate-recipe-suggestions').onclick = async () => {
+                const generateButton = document.getElementById('generate-recipe-suggestions');
+                if (appState.shoppingList.length === 0) {
+                    showMessageModal("Добавьте продукты в список покупок, чтобы получить рецепты.");
+                    return;
+                }
+
+                generateButton.disabled = true;
+                generateButton.textContent = 'Генерация рецептов...';
+                showAIModal('Предложенные рецепты', '', true);
+
+                const ingredients = appState.shoppingList.map(item => item.name).join(', ');
+                try {
+                    const prompt = `Предложи 3-5 простых рецептов, которые можно приготовить, используя следующие ингредиенты: ${ingredients}. Для каждого рецепта укажи название и основные шаги приготовления.`;
+                    const chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
+                    const payload = { contents: chatHistory };
+                    const apiKey = ""; // Этот ключ будет предоставлен Canvas во время выполнения
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const result = await response.json();
+                    if (result.candidates && result.candidates.length > 0 &&
+                        result.candidates[0].content && result.candidates[0].content.parts &&
+                        result.candidates[0].content.parts.length > 0) {
+                        showAIModal('Предложенные рецепты', result.candidates[0].content.parts[0].text, false);
+                    } else {
+                        console.error("Ошибка при получении рецептов от AI:", result);
+                        showAIModal('Предложенные рецепты', "Не удалось сгенерировать рецепты. Попробуйте изменить список покупок.", false);
+                    }
+                } catch (error) {
+                    console.error("Ошибка сети при запросе к AI:", error);
+                    showAIModal('Предложенные рецепты', "Ошибка сети. Проверьте подключение.", false);
+                } finally {
+                    generateButton.disabled = false;
+                    generateButton.textContent = '✨ Предложить рецепты';
+                }
+            };
+
+            document.querySelectorAll('.toggle-shopping-item').forEach(checkbox => {
+                checkbox.onchange = (e) => {
+                    const id = parseInt(e.target.dataset.id);
+                    toggleShoppingItem(id);
+                };
+            });
+
+            document.querySelectorAll('.remove-shopping-item').forEach(button => {
+                button.onclick = (e) => {
+                    const id = parseInt(e.currentTarget.dataset.id);
+                    removeShoppingItem(id);
+                };
+            });
+        }
+
+        function renderGoalsTab() {
+            const contentArea = document.getElementById('content-area');
+            contentArea.innerHTML = `
+                <div>
+                    <h2 class="text-3xl font-bold text-amber-400 mb-6 text-center">Мои Цели</h2>
+                    <div class="flex mb-4">
+                        <input
+                            type="text"
+                            placeholder="Добавить новую цель..."
+                            id="new-goal-text"
+                            class="flex-grow p-3 rounded-l-lg bg-gray-700 text-white border border-gray-600 focus:outline-none focus:border-amber-500"
+                        />
+                        <button
+                            id="add-goal-button"
+                            class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-6 rounded-r-lg transition duration-300 ease-in-out transform hover:scale-105"
+                        >
+                            Добавить
+                        </button>
+                    </div>
+                    ${appState.goals.length === 0 ? `
+                        <p class="text-gray-400 text-center">Список целей пуст.</p>
+                    ` : `
+                        <ul class="space-y-3" id="goals-list-items">
+                            ${appState.goals.map(goal => `
+                                <li class="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-gray-700 p-4 rounded-lg shadow-md border border-gray-600">
+                                    <span
+                                        data-id="${goal.id}"
+                                        class="toggle-goal flex-grow text-lg cursor-pointer ${goal.completed ? 'line-through text-gray-500' : 'text-gray-200'}"
+                                    >
+                                        ${goal.text}
+                                    </span>
+                                    <div class="flex items-center mt-2 sm:mt-0 space-x-2">
+                                        <button
+                                            data-goal-text="${goal.text}"
+                                            class="generate-action-plan bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-full text-sm transition duration-300 ease-in-out transform hover:scale-105 flex items-center"
+                                        >
+                                            ✨ Создать план
+                                        </button>
+                                        <button
+                                            data-id="${goal.id}"
+                                            class="remove-goal text-red-400 hover:text-red-600 transition-colors duration-200"
+                                        >
+                                            ${icons.DeleteIcon}
+                                        </button>
+                                    </div>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    `}
+                </div>
+            `;
+
+            document.getElementById('add-goal-button').onclick = () => {
+                const newGoalText = document.getElementById('new-goal-text').value;
+                addGoal(newGoalText);
+                document.getElementById('new-goal-text').value = '';
+            };
+            document.getElementById('new-goal-text').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    document.getElementById('add-goal-button').click();
+                }
+            });
+
+            document.querySelectorAll('.toggle-goal').forEach(span => {
+                span.onclick = (e) => {
+                    const id = parseInt(e.target.dataset.id);
+                    toggleGoal(id);
+                };
+            });
+
+            document.querySelectorAll('.remove-goal').forEach(button => {
+                button.onclick = (e) => {
+                    const id = parseInt(e.currentTarget.dataset.id);
+                    removeGoal(id);
+                };
+            });
+
+            document.querySelectorAll('.generate-action-plan').forEach(button => {
+                button.onclick = async (e) => {
+                    const goalText = e.currentTarget.dataset.goalText;
+                    e.currentTarget.disabled = true;
+                    e.currentTarget.textContent = 'Генерация...';
+                    showAIModal(`План действий для цели: "${goalText}"`, '', true);
+
+                    try {
+                        const prompt = `Сгенерируй подробный план действий для достижения следующей цели: "${goalText}". Разбей его на конкретные шаги, возможно, с указанием сроков или ресурсов.`;
+                        const chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
+                        const payload = { contents: chatHistory };
+                        const apiKey = ""; // Этот ключ будет предоставлен Canvas во время выполнения
+                        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                        const response = await fetch(apiUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+
+                        const result = await response.json();
+                        if (result.candidates && result.candidates.length > 0 &&
+                            result.candidates[0].content && result.candidates[0].content.parts &&
+                            result.candidates[0].content.parts.length > 0) {
+                            showAIModal(`План действий для цели: "${goalText}"`, result.candidates[0].content.parts[0].text, false);
+                        } else {
+                            console.error("Ошибка при получении плана от AI:", result);
+                            showAIModal(`План действий для цели: "${goalText}"`, "Не удалось сгенерировать план действий. Попробуйте перефразировать цель.", false);
+                        }
+                    } catch (error) {
+                        console.error("Ошибка сети при запросе к AI:", error);
+                        showAIModal(`План действий для цели: "${goalText}"`, "Ошибка сети. Проверьте подключение.", false);
+                    } finally {
+                        e.currentTarget.disabled = false;
+                        e.currentTarget.textContent = '✨ Создать план';
+                    }
+                };
+            });
+        }
+
+        function renderFamilyTimeTab() {
+            const contentArea = document.getElementById('content-area');
+            const daysOfWeek = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'];
+
+            contentArea.innerHTML = `
+                <div>
+                    <h2 class="text-3xl font-bold text-amber-400 mb-6 text-center">Время с Семьей</h2>
+                    <p class="text-gray-300 mb-6 text-center">
+                        Планируй совместные мероприятия, чтобы проводить больше времени с близкими. Они появятся в твоем расписании.
+                    </p>
+                    <div class="bg-gray-700 p-6 rounded-lg shadow-md border border-gray-600 mb-8">
+                        <h3 class="text-2xl font-bold text-amber-300 mb-4 text-center">Добавить семейное мероприятие</h3>
+                        <div class="flex flex-col sm:flex-row gap-4 mb-4">
+                            <select
+                                id="family-activity-day"
+                                class="w-full sm:w-1/4 p-3 rounded-lg bg-gray-800 text-white border border-gray-600 focus:outline-none focus:border-amber-500"
+                            >
+                                ${daysOfWeek.map(day => `<option value="${day}">${day}</option>`).join('')}
+                            </select>
+                            <input
+                                type="time"
+                                id="family-activity-time"
+                                value="19:00"
+                                class="w-full sm:w-1/4 p-3 rounded-lg bg-gray-800 text-white border border-gray-600 focus:outline-none focus:border-amber-500"
+                            />
+                            <input
+                                type="text"
+                                placeholder="Название мероприятия (например, 'Киновечер')"
+                                id="new-family-activity-text"
+                                class="flex-grow p-3 rounded-lg bg-gray-800 text-white border border-gray-600 focus:outline-none focus:border-amber-500"
+                            />
+                            <button
+                                id="add-family-activity-button"
+                                class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300 ease-in-out transform hover:scale-105"
+                            >
+                                Добавить
+                            </button>
+                        </div>
+                        <h3 class="text-2xl font-bold text-amber-300 mb-4 text-center mt-6">Идеи для семьи с AI</h3>
+                        <div class="flex flex-col sm:flex-row gap-4">
+                            <textarea
+                                placeholder="Опишите, какие идеи вы ищете (например, 'активные игры на свежем воздухе для детей 5-7 лет')"
+                                id="family-activity-prompt"
+                                class="flex-grow p-3 rounded-lg bg-gray-800 text-white border border-gray-600 focus:outline-none focus:border-amber-500 h-24 resize-y"
+                            ></textarea>
+                            <button
+                                id="generate-family-activity-suggestions"
+                                class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                ✨ Идеи для семьи
+                            </button>
+                        </div>
+                    </div>
+                    ${appState.familyActivities.length === 0 ? `
+                        <p class="text-gray-400 text-center">Пока нет запланированных семейных мероприятий.</p>
+                    ` : `
+                        <ul class="space-y-3" id="family-activities-list">
+                            ${appState.familyActivities.map(activity => `
+                                <li class="flex items-center justify-between bg-gray-700 p-4 rounded-lg shadow-md border border-gray-600">
+                                    <span class="flex-grow text-lg text-gray-200">${activity.text} (${activity.day}, ${activity.time})</span>
+                                    <button
+                                        data-id="${activity.id}"
+                                        data-day="${activity.day}"
+                                        data-time="${activity.time}"
+                                        data-activity-text="Семья: ${activity.text}"
+                                        class="remove-family-activity ml-4 text-red-400 hover:text-red-600 transition-colors duration-200"
+                                    >
+                                        ${icons.DeleteIcon}
+                                    </button>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    `}
+                </div>
+            `;
+
+            document.getElementById('add-family-activity-button').onclick = () => {
+                const newActivityText = document.getElementById('new-family-activity-text').value;
+                const day = document.getElementById('family-activity-day').value;
+                const time = document.getElementById('family-activity-time').value;
+                addFamilyActivity({ text: newActivityText, day: day, time: time });
+                document.getElementById('new-family-activity-text').value = '';
+            };
+            document.getElementById('new-family-activity-text').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    document.getElementById('add-family-activity-button').click();
+                }
+            });
+
+            document.querySelectorAll('.remove-family-activity').forEach(button => {
+                button.onclick = (e) => {
+                    const id = parseInt(e.currentTarget.dataset.id);
+                    const day = e.currentTarget.dataset.day;
+                    const time = e.currentTarget.dataset.time;
+                    const activityText = e.currentTarget.dataset.activityText;
+                    removeFamilyActivity(id, day, time, activityText);
+                };
+            });
+
+            document.getElementById('generate-family-activity-suggestions').onclick = async () => {
+                const promptText = document.getElementById('family-activity-prompt').value;
+                if (!promptText.trim()) {
+                    showMessageModal("Пожалуйста, опишите, какие идеи для семейного досуга вы ищете.");
+                    return;
+                }
+                const generateButton = document.getElementById('generate-family-activity-suggestions');
+                generateButton.disabled = true;
+                generateButton.textContent = 'Генерация...';
+                showAIModal('Предложенные идеи для семьи', '', true);
+
+                try {
+                    const prompt = `Предложи 3-5 идей для семейных мероприятий, учитывая следующие предпочтения: "${promptText}".`;
+                    const chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
+                    const payload = { contents: chatHistory };
+                    const apiKey = ""; // Этот ключ будет предоставлен Canvas во время выполнения
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const result = await response.json();
+                    if (result.candidates && result.candidates.length > 0 &&
+                        result.candidates[0].content && result.candidates[0].content.parts &&
+                        result.candidates[0].content.parts.length > 0) {
+                        showAIModal('Предложенные идеи для семьи', result.candidates[0].content.parts[0].text, false);
+                    } else {
+                        console.error("Ошибка при получении идей от AI:", result);
+                        showAIModal('Предложенные идеи для семьи', "Не удалось сгенерировать идеи. Попробуйте перефразировать предпочтения.", false);
+                    }
+                } catch (error) {
+                    console.error("Ошибка сети при запросе к AI:", error);
+                    showAIModal('Предложенные идеи для семьи', "Ошибка сети. Проверьте подключение.", false);
+                } finally {
+                    generateButton.disabled = false;
+                    generateButton.textContent = '✨ Идеи для семьи';
+                }
+            };
+        }
+
+        function renderDailyHabitsTab() {
+            const contentArea = document.getElementById('content-area');
+            const daysOfWeek = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'];
+
+            contentArea.innerHTML = `
+                <div>
+                    <h2 class="text-3xl font-bold text-amber-400 mb-6 text-center">Ежедневные Привычки</h2>
+                    <p class="text-gray-300 mb-6 text-center">
+                        Отмечай свои ежедневные привычки, чтобы отслеживать прогресс. Они появятся в твоем расписании.
+                    </p>
+                    <div class="bg-gray-700 p-6 rounded-lg shadow-md border border-gray-600 mb-8">
+                        <h3 class="text-2xl font-bold text-amber-300 mb-4 text-center">Добавить привычку</h3>
+                        <div class="flex flex-col sm:flex-row gap-4 mb-4">
+                            <select
+                                id="habit-day"
+                                class="w-full sm:w-1/4 p-3 rounded-lg bg-gray-800 text-white border border-gray-600 focus:outline-none focus:border-amber-500"
+                            >
+                                ${daysOfWeek.map(day => `<option value="${day}">${day}</option>`).join('')}
+                            </select>
+                            <input
+                                type="time"
+                                id="habit-time"
+                                value="08:00"
+                                class="w-full sm:w-1/4 p-3 rounded-lg bg-gray-800 text-white border border-gray-600 focus:outline-none focus:border-amber-500"
+                            />
+                            <input
+                                type="text"
+                                placeholder="Название привычки (например, 'Медитация 5 мин')"
+                                id="new-habit-text"
+                                class="flex-grow p-3 rounded-lg bg-gray-800 text-white border border-gray-600 focus:outline-none focus:border-amber-500"
+                            />
+                            <button
+                                id="add-habit-button"
+                                class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300 ease-in-out transform hover:scale-105"
+                            >
+                                Добавить
+                            </button>
+                        </div>
+                        <h3 class="text-2xl font-bold text-amber-300 mb-4 text-center mt-6">Предложить привычки с AI</h3>
+                        <div class="flex flex-col sm:flex-row gap-4">
+                            <textarea
+                                placeholder="Опишите, какие привычки вы хотели бы развить (например, 'для улучшения здоровья и продуктивности')"
+                                id="habit-prompt"
+                                class="flex-grow p-3 rounded-lg bg-gray-800 text-white border border-gray-600 focus:outline-none focus:border-amber-500 h-24 resize-y"
+                            ></textarea>
+                            <button
+                                id="generate-habit-suggestions"
+                                class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                ✨ Предложить привычки
+                            </button>
+                        </div>
+                    </div>
+                    ${appState.dailyHabits.length === 0 ? `
+                        <p class="text-gray-400 text-center">Пока нет ежедневных привычек.</p>
+                    ` : `
+                        <ul class="space-y-3" id="daily-habits-list">
+                            ${appState.dailyHabits.map(habit => `
+                                <li class="flex items-center justify-between bg-gray-700 p-4 rounded-lg shadow-md border border-gray-600">
+                                    <span
+                                        data-id="${habit.id}"
+                                        class="toggle-daily-habit flex-grow text-lg cursor-pointer ${habit.completed ? 'line-through text-gray-500' : 'text-gray-200'}"
+                                    >
+                                        ${habit.text} (${habit.day}, ${habit.time})
+                                    </span>
+                                    <button
+                                        data-id="${habit.id}"
+                                        data-day="${habit.day}"
+                                        data-time="${habit.time}"
+                                        data-activity-text="Привычка: ${habit.text}"
+                                        class="remove-daily-habit ml-4 text-red-400 hover:text-red-600 transition-colors duration-200"
+                                    >
+                                        ${icons.DeleteIcon}
+                                    </button>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    `}
+                </div>
+            `;
+
+            document.getElementById('add-habit-button').onclick = () => {
+                const newHabitText = document.getElementById('new-habit-text').value;
+                const day = document.getElementById('habit-day').value;
+                const time = document.getElementById('habit-time').value;
+                addDailyHabit({ text: newHabitText, day: day, time: time });
+                document.getElementById('new-habit-text').value = '';
+            };
+            document.getElementById('new-habit-text').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    document.getElementById('add-habit-button').click();
+                }
+            });
+
+            document.querySelectorAll('.toggle-daily-habit').forEach(span => {
+                span.onclick = (e) => {
+                    const id = parseInt(e.target.dataset.id);
+                    toggleDailyHabit(id);
+                };
+            });
+
+            document.querySelectorAll('.remove-daily-habit').forEach(button => {
+                button.onclick = (e) => {
+                    const id = parseInt(e.currentTarget.dataset.id);
+                    const day = e.currentTarget.dataset.day;
+                    const time = e.currentTarget.dataset.time;
+                    const activityText = e.currentTarget.dataset.activityText;
+                    removeDailyHabit(id, day, time, activityText);
+                };
+            });
+
+            document.getElementById('generate-habit-suggestions').onclick = async () => {
+                const promptText = document.getElementById('habit-prompt').value;
+                if (!promptText.trim()) {
+                    showMessageModal("Пожалуйста, опишите, какие привычки вы хотели бы развить.");
+                    return;
+                }
+                const generateButton = document.getElementById('generate-habit-suggestions');
+                generateButton.disabled = true;
+                generateButton.textContent = 'Генерация...';
+                showAIModal('Предложенные привычки', '', true);
+
+                try {
+                    const prompt = `Предложи 3-5 новых полезных привычек, учитывая следующую цель или область улучшения: "${promptText}". Для каждой привычки укажи краткое описание и возможную пользу.`;
+                    const chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
+                    const payload = { contents: chatHistory };
+                    const apiKey = ""; // Этот ключ будет предоставлен Canvas во время выполнения
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const result = await response.json();
+                    if (result.candidates && result.candidates.length > 0 &&
+                        result.candidates[0].content && result.candidates[0].content.parts &&
+                        result.candidates[0].content.parts.length > 0) {
+                        showAIModal('Предложенные привычки', result.candidates[0].content.parts[0].text, false);
+                    } else {
+                        console.error("Ошибка при получении привычек от AI:", result);
+                        showAIModal('Предложенные привычки', "Не удалось сгенерировать привычки. Попробуйте перефразировать запрос.", false);
+                    }
+                } catch (error) {
+                    console.error("Ошибка сети при запросе к AI:", error);
+                    showAIModal('Предложенные привычки', "Ошибка сети. Проверьте подключение.", false);
+                } finally {
+                    generateButton.disabled = false;
+                    generateButton.textContent = '✨ Предложить привычки';
+                }
+            };
+        }
+
+        function renderLearningProgressTab() {
+            const contentArea = document.getElementById('content-area');
+            const daysOfWeek = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'];
+
+            contentArea.innerHTML = `
+                <div>
+                    <h2 class="text-3xl font-bold text-amber-400 mb-6 text-center">Прогресс в Обучении</h2>
+                    <p class="text-gray-300 mb-6 text-center">
+                        Отслеживай свой прогресс по предметам для подготовки к школе/университету. Они появятся в твоем расписании.
+                    </p>
+                    <div class="bg-gray-700 p-6 rounded-lg shadow-md border border-gray-600 mb-8">
+                        <h3 class="text-2xl font-bold text-amber-300 mb-4 text-center">Добавить предмет</h3>
+                        <div class="flex flex-col sm:flex-row gap-4 mb-4">
+                            <select
+                                id="learning-subject-day"
+                                class="w-full sm:w-1/4 p-3 rounded-lg bg-gray-800 text-white border border-gray-600 focus:outline-none focus:border-amber-500"
+                            >
+                                ${daysOfWeek.map(day => `<option value="${day}">${day}</option>`).join('')}
+                            </select>
+                            <input
+                                type="time"
+                                id="learning-subject-time"
+                                value="10:00"
+                                class="w-full sm:w-1/4 p-3 rounded-lg bg-gray-800 text-white border border-gray-600 focus:outline-none focus:border-amber-500"
+                            />
+                            <input
+                                type="text"
+                                placeholder="Название предмета (например, 'Математика 9 класс')"
+                                id="new-learning-subject-text"
+                                class="flex-grow p-3 rounded-lg bg-gray-800 text-white border border-gray-600 focus:outline-none focus:border-amber-500"
+                            />
+                            <button
+                                id="add-learning-subject-button"
+                                class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300 ease-in-out transform hover:scale-105"
+                            >
+                                Добавить
+                            </button>
+                        </div>
+                    </div>
+                    ${appState.learningSubjects.length === 0 ? `
+                        <p class="text-gray-400 text-center">Пока нет предметов для отслеживания.</p>
+                    ` : `
+                        <ul class="space-y-3" id="learning-subjects-list">
+                            ${appState.learningSubjects.map(subject => `
+                                <li class="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-gray-700 p-4 rounded-lg shadow-md border border-gray-600">
+                                    <div class="flex-grow">
+                                        <span class="text-lg text-gray-200">${subject.text} (${subject.day}, ${subject.time})</span>
+                                        <div class="flex items-center mt-2 sm:mt-0">
+                                            <input
+                                                type="range"
+                                                min="0"
+                                                max="100"
+                                                value="${subject.progress}"
+                                                data-id="${subject.id}"
+                                                class="update-learning-progress w-32 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                                            />
+                                            <span class="ml-3 text-gray-300">${subject.progress}%</span>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center mt-2 sm:mt-0 space-x-2">
+                                        <button
+                                            data-subject-text="${subject.text}"
+                                            class="generate-quiz-questions bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-full text-sm transition duration-300 ease-in-out transform hover:scale-105 flex items-center"
+                                        >
+                                            ✨ Викторина
+                                        </button>
+                                        <button
+                                            data-id="${subject.id}"
+                                            data-day="${subject.day}"
+                                            data-time="${subject.time}"
+                                            data-activity-text="Обучение: ${subject.text}"
+                                            class="remove-learning-subject ml-0 sm:ml-4 mt-2 sm:mt-0 text-red-400 hover:text-red-600 transition-colors duration-200"
+                                        >
+                                            ${icons.DeleteIcon}
+                                        </button>
+                                    </div>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    `}
+                </div>
+            `;
+
+            document.getElementById('add-learning-subject-button').onclick = () => {
+                const newSubjectText = document.getElementById('new-learning-subject-text').value;
+                const day = document.getElementById('learning-subject-day').value;
+                const time = document.getElementById('learning-subject-time').value;
+                addLearningSubject({ text: newSubjectText, day: day, time: time });
+                document.getElementById('new-learning-subject-text').value = '';
+            };
+            document.getElementById('new-learning-subject-text').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    document.getElementById('add-learning-subject-button').click();
+                }
+            });
+
+            document.querySelectorAll('.update-learning-progress').forEach(input => {
+                input.onchange = (e) => {
+                    const id = parseInt(e.target.dataset.id);
+                    const progress = parseInt(e.target.value);
+                    updateLearningSubjectProgress(id, progress);
+                };
+            });
+
+            document.querySelectorAll('.remove-learning-subject').forEach(button => {
+                button.onclick = (e) => {
+                    const id = parseInt(e.currentTarget.dataset.id);
+                    const day = e.currentTarget.dataset.day;
+                    const time = e.currentTarget.dataset.time;
+                    const activityText = e.currentTarget.dataset.activityText;
+                    removeLearningSubject(id, day, time, activityText);
+                };
+            });
+
+            document.querySelectorAll('.generate-quiz-questions').forEach(button => {
+                button.onclick = async (e) => {
+                    const subjectText = e.currentTarget.dataset.subjectText;
+                    e.currentTarget.disabled = true;
+                    e.currentTarget.textContent = 'Генерация...';
+                    showAIModal(`Вопросы викторины по теме: "${subjectText}"`, '', true);
+
+                    try {
+                        const prompt = `Сгенерируй 5 вопросов для викторины по теме: "${subjectText}". Каждый вопрос должен быть с вариантами ответов (A, B, C, D) и указанием правильного ответа (например, "Правильный ответ: A").`;
+                        const chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
+                        const payload = { contents: chatHistory };
+                        const apiKey = ""; // Этот ключ будет предоставлен Canvas во время выполнения
+                        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                        const response = await fetch(apiUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+
+                        const result = await response.json();
+                        if (result.candidates && result.candidates.length > 0 &&
+                            result.candidates[0].content && result.candidates[0].content.parts &&
+                            result.candidates[0].content.parts.length > 0) {
+                            showAIModal(`Вопросы викторины по теме: "${subjectText}"`, result.candidates[0].content.parts[0].text, false);
+                        } else {
+                            console.error("Ошибка при получении вопросов викторины от AI:", result);
+                            showAIModal(`Вопросы викторины по теме: "${subjectText}"`, "Не удалось сгенерировать вопросы викторины. Попробуйте перефразировать тему.", false);
+                        }
+                    } catch (error) {
+                        console.error("Ошибка сети при запросе к AI:", error);
+                        showAIModal(`Вопросы викторины по теме: "${subjectText}"`, "Ошибка сети. Проверьте подключение.", false);
+                    } finally {
+                        e.currentTarget.disabled = false;
+                        e.currentTarget.textContent = '✨ Викторина';
+                    }
+                }
+            });
+        }
+
+        function renderFinanceTab() {
+            const contentArea = document.getElementById('content-area');
+            const totalBalance = appState.transactions.reduce((sum, t) => sum + t.amount, 0);
+
+            contentArea.innerHTML = `
+                <div>
+                    <h2 class="text-3xl font-bold text-amber-400 mb-6 text-center">Мои Финансы</h2>
+                    <p class="text-gray-300 mb-6 text-center">
+                        Отслеживай свои доходы и расходы.
+                    </p>
+                    <div class="p-6 bg-gray-700 rounded-lg shadow-md border border-gray-600 mb-8">
+                        <h3 class="text-2xl font-bold text-amber-300 mb-4 text-center">Текущий Баланс: <span class="${totalBalance >= 0 ? 'text-green-400' : 'text-red-400'}">${totalBalance.toFixed(2)}</span></h3>
+                        <div class="flex flex-col sm:flex-row gap-4 mb-4">
+                            <input
+                                type="text"
+                                placeholder="Описание (например, 'Заработок', 'Покупка')"
+                                id="transaction-description"
+                                class="flex-grow p-3 rounded-lg bg-gray-800 text-white border border-gray-600 focus:outline-none focus:border-amber-500"
+                            />
+                            <input
+                                type="number"
+                                placeholder="Сумма"
+                                id="transaction-amount"
+                                class="w-full sm:w-1/4 p-3 rounded-lg bg-gray-800 text-white border border-gray-600 focus:outline-none focus:border-amber-500"
+                            />
+                            <select
+                                id="transaction-type"
+                                class="w-full sm:w-1/4 p-3 rounded-lg bg-gray-800 text-white border border-gray-600 focus:outline-none focus:border-amber-500"
+                            >
+                                <option value="income">Доход</option>
+                                <option value="expense">Расход</option>
+                            </select>
+                            <button
+                                id="add-transaction-button"
+                                class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300 ease-in-out transform hover:scale-105"
+                            >
+                                Добавить
+                            </button>
+                        </div>
+                        <h3 class="text-2xl font-bold text-amber-300 mb-4 text-center mt-6">Финансовый совет с AI</h3>
+                        <button
+                            id="generate-finance-tips"
+                            class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300 ease-in-out transform hover:scale-105 w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            ✨ Финансовый совет
+                        </button>
+                    </div>
+                    ${appState.transactions.length === 0 ? `
+                        <p class="text-gray-400 text-center">Пока нет транзакций.</p>
+                    ` : `
+                        <ul class="space-y-3 mt-4" id="transactions-list">
+                            ${appState.transactions.map(t => `
+                                <li class="flex items-center justify-between bg-gray-800 p-4 rounded-lg shadow-md border border-gray-700">
+                                    <div>
+                                        <span class="text-lg text-gray-200">${t.description}</span>
+                                        <span class="block text-sm text-gray-400">${t.date}</span>
+                                    </div>
+                                    <div class="font-bold text-lg ${t.amount >= 0 ? 'text-green-400' : 'text-red-400'}">
+                                        ${t.amount.toFixed(2)}
+                                    </div>
+                                    <button
+                                        data-id="${t.id}"
+                                        class="remove-transaction ml-4 text-red-400 hover:text-red-600 transition-colors duration-200"
+                                    >
+                                        ${icons.DeleteIcon}
+                                    </button>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    `}
+                </div>
+            `;
+
+            document.getElementById('add-transaction-button').onclick = () => {
+                const description = document.getElementById('transaction-description').value;
+                const amount = parseFloat(document.getElementById('transaction-amount').value);
+                const type = document.getElementById('transaction-type').value;
+
+                if (!description.trim() || isNaN(amount)) {
+                    showMessageModal("Пожалуйста, введите описание и корректную сумму.");
+                    return;
+                }
+                addTransaction({ description, amount: type === 'expense' ? -amount : amount, type });
+                document.getElementById('transaction-description').value = '';
+                document.getElementById('transaction-amount').value = '';
+            };
+
+            document.querySelectorAll('.remove-transaction').forEach(button => {
+                button.onclick = (e) => {
+                    const id = parseInt(e.currentTarget.dataset.id);
+                    removeTransaction(id);
+                };
+            });
+
+            document.getElementById('generate-finance-tips').onclick = async () => {
+                const generateButton = document.getElementById('generate-finance-tips');
+                if (appState.transactions.length === 0) {
+                    showMessageModal("Добавьте транзакции, чтобы получить финансовые советы.");
+                    return;
+                }
+
+                generateButton.disabled = true;
+                generateButton.textContent = 'Генерация советов...';
+                showAIModal('Финансовые советы', '', true);
+
+                const transactionSummary = appState.transactions.map(t => `${t.type === 'expense' ? 'Расход' : 'Доход'}: ${t.description} - ${t.amount} KZT`).join('\n');
+                try {
+                    const prompt = `Проанализируй следующие финансовые транзакции и предложи персонализированные советы по экономии или улучшению финансового положения. Транзакции:\n${transactionSummary}`;
+                    const chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
+                    const payload = { contents: chatHistory };
+                    const apiKey = ""; // Этот ключ будет предоставлен Canvas во время выполнения
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const result = await response.json();
+                    if (result.candidates && result.candidates.length > 0 &&
+                        result.candidates[0].content && result.candidates[0].content.parts &&
+                        result.candidates[0].content.parts.length > 0) {
+                        showAIModal('Финансовые советы', result.candidates[0].content.parts[0].text, false);
+                    } else {
+                        console.error("Ошибка при получении финансовых советов от AI:", result);
+                        showAIModal('Финансовые советы', "Не удалось сгенерировать финансовые советы. Попробуйте добавить больше транзакций.", false);
+                    }
+                } catch (error) {
+                    console.error("Ошибка сети при запросе к AI:", error);
+                    showAIModal('Финансовые советы', "Ошибка сети. Проверьте подключение.", false);
+                } finally {
+                    generateButton.disabled = false;
+                    generateButton.textContent = '✨ Финансовый совет';
+                }
+            };
+        }
+
+        function renderSchulteTableTab() {
+            const contentArea = document.getElementById('content-area');
+            let size = 5;
+            let cells = [];
+            let currentNumber = 1;
+            let startTime = null;
+            let elapsedTime = 0;
+            let gameOver = false;
+            let timerInterval = null;
+
+            const formatTime = (seconds) => {
+                const minutes = Math.floor(seconds / 60);
+                const remainingSeconds = seconds % 60;
+                return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+            };
+
+            const generateTable = () => {
+                const numbers = Array.from({ length: size * size }, (_, i) => i + 1);
+                // Перемешивание Фишера-Йетса
+                for (let i = numbers.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [numbers[i], numbers[j]] = [numbers[j], numbers[i]];
+                }
+                cells = numbers;
+                currentNumber = 1;
+                startTime = null;
+                elapsedTime = 0;
+                gameOver = false;
+                clearInterval(timerInterval);
+                renderSchulteContent();
+            };
+
+            const handleCellClick = (number) => {
+                if (gameOver) return;
+
+                if (number === currentNumber) {
+                    if (currentNumber === 1) {
+                        startTime = Date.now();
+                        timerInterval = setInterval(() => {
+                            elapsedTime = Math.floor((Date.now() - startTime) / 1000);
+                            document.getElementById('schulte-time').textContent = formatTime(elapsedTime);
+                        }, 1000);
+                    }
+                    if (currentNumber === size * size) {
+                        gameOver = true;
+                        clearInterval(timerInterval);
+                    }
+                    currentNumber++;
+                    // Отмечаем ячейку как найденную
+                    cells = cells.map(cell =>
+                        cell === number ? 'found' : cell
+                    );
+                    renderSchulteContent();
+                }
+            };
+
+            const renderSchulteContent = () => {
+                contentArea.innerHTML = `
+                    <div class="flex flex-col items-center p-4">
+                        <h2 class="text-3xl font-bold text-amber-400 mb-6 text-center">Таблица Шульте</h2>
+                        <p class="text-gray-300 mb-4 text-center">
+                            Найди числа по порядку от 1 до ${size * size} как можно быстрее.
+                        </p>
+
+                        <div class="flex items-center space-x-4 mb-6">
+                            <label htmlFor="table-size" class="text-gray-300">Размер таблицы:</label>
+                            <select
+                                id="table-size"
+                                value="${size}"
+                                class="p-2 rounded-lg bg-gray-700 text-white border border-gray-600 focus:outline-none focus:border-amber-500"
+                                ${startTime && !gameOver ? 'disabled' : ''}
+                            >
+                                <option value="3">3x3</option>
+                                <option value="4">4x4</option>
+                                <option value="5">5x5</option>
+                                <option value="6">6x6</option>
+                                <option value="7">7x7</option>
+                            </select>
+                            <button
+                                id="schulte-reset-button"
+                                class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-4 rounded-full transition duration-300 ease-in-out transform hover:scale-105"
+                            >
+                                Начать заново
+                            </button>
+                        </div>
+
+                        <div class="text-xl font-semibold text-amber-300 mb-4">
+                            Следующее число: <span class="text-white" id="schulte-current-number">${currentNumber > size * size ? 'Завершено!' : currentNumber}</span>
+                        </div>
+                        <div class="text-xl font-semibold text-gray-300 mb-6">
+                            Время: <span class="text-white" id="schulte-time">${formatTime(elapsedTime)}</span>
+                        </div>
+
+                        ${gameOver ? `
+                            <div class="text-green-400 text-2xl font-bold mb-4">
+                                Поздравляем! Время: ${formatTime(elapsedTime)}
+                            </div>
+                        ` : ''}
+
+                        <div
+                            id="schulte-grid"
+                            class="schulte-grid"
+                            style="grid-template-columns: repeat(${size}, minmax(0, 1fr)); width: ${size * 60}px; max-width: 90vw; aspect-ratio: 1 / 1;"
+                        >
+                            ${cells.map((cell, index) => `
+                                <div
+                                    data-number="${typeof cell === 'number' ? cell : ''}"
+                                    class="schulte-cell ${cell === 'found' ? 'found' : ''}"
+                                >
+                                    <span>${cell === 'found' ? '✓' : cell}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+
+                document.getElementById('table-size').onchange = (e) => {
+                    size = parseInt(e.target.value);
+                    generateTable();
+                };
+                document.getElementById('schulte-reset-button').onclick = generateTable;
+
+                document.querySelectorAll('.schulte-cell').forEach(cellElement => {
+                    cellElement.onclick = (e) => {
+                        const number = parseInt(e.currentTarget.dataset.number);
+                        handleCellClick(number);
+                    };
+                });
+            };
+
+            generateTable(); // Изначальный рендеринг при открытии вкладки
+        }
+
+        function renderNotebookTab() {
+            const contentArea = document.getElementById('content-area');
+            contentArea.innerHTML = `
+                <div>
+                    <h2 class="text-3xl font-bold text-amber-400 mb-6 text-center">Мой Блокнот</h2>
+                    <p class="text-gray-300 mb-6 text-center">
+                        Записывай свои мысли, идеи и важную информацию.
+                    </p>
+                    <div class="bg-gray-700 p-6 rounded-lg shadow-md border border-gray-600 mb-8">
+                        <h3 class="text-2xl font-bold text-amber-300 mb-4 text-center">Новая заметка</h3>
+                        <textarea
+                            id="new-note-text"
+                            class="w-full p-3 rounded-lg bg-gray-800 text-white border border-gray-600 focus:outline-none focus:border-amber-500 h-32 resize-y mb-4"
+                            placeholder="Напишите свою заметку здесь..."
+                        ></textarea>
+                        <button
+                            id="add-note-button"
+                            class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300 ease-in-out transform hover:scale-105 w-full"
+                        >
+                            Добавить заметку
+                        </button>
+                    </div>
+                    ${appState.notes.length === 0 ? `
+                        <p class="text-gray-400 text-center">В блокноте пока нет заметок.</p>
+                    ` : `
+                        <ul class="space-y-4" id="notes-list">
+                            ${appState.notes.map(note => `
+                                <li class="flex flex-col bg-gray-700 p-4 rounded-lg shadow-md border border-gray-600">
+                                    <p class="text-gray-200 text-lg mb-2 whitespace-pre-wrap">${note.text}</p>
+                                    <span class="text-gray-400 text-sm mb-3">Создано: ${new Date(note.timestamp).toLocaleString()}</span>
+                                    <div class="flex justify-end space-x-2 mt-2">
+                                        <button
+                                            data-note-text="${note.text}"
+                                            data-type="summarize"
+                                            class="process-note-with-ai bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-full text-sm transition duration-300 ease-in-out transform hover:scale-105 flex items-center"
+                                        >
+                                            ✨ Сводка
+                                        </button>
+                                        <button
+                                            data-note-text="${note.text}"
+                                            data-type="expand"
+                                            class="process-note-with-ai bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-full text-sm transition duration-300 ease-in-out transform hover:scale-105 flex items-center"
+                                        >
+                                            ✨ Развернуть
+                                        </button>
+                                        <button
+                                            data-id="${note.id}"
+                                            class="remove-note text-red-400 hover:text-red-600 transition-colors duration-200"
+                                        >
+                                            ${icons.DeleteIcon}
+                                        </button>
+                                    </div>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    `}
+                </div>
+            `;
+
+            document.getElementById('add-note-button').onclick = () => {
+                const newNoteText = document.getElementById('new-note-text').value;
+                addNote(newNoteText);
+                document.getElementById('new-note-text').value = '';
+            };
+
+            document.querySelectorAll('.remove-note').forEach(button => {
+                button.onclick = (e) => {
+                    const id = parseInt(e.currentTarget.dataset.id);
+                    removeNote(id);
+                };
+            });
+
+            document.querySelectorAll('.process-note-with-ai').forEach(button => {
+                button.onclick = async (e) => {
+                    const noteText = e.currentTarget.dataset.noteText;
+                    const type = e.currentTarget.dataset.type;
+                    e.currentTarget.disabled = true;
+                    e.currentTarget.textContent = 'Генерация...';
+
+                    let title = type === 'summarize' ? 'Сводка заметки' : 'Развернутая заметка';
+                    showAIModal(title, '', true);
+
+                    let prompt;
+                    if (type === 'summarize') {
+                        prompt = `Сделай краткую сводку следующей заметки: "${noteText}"`;
+                    } else if (type === 'expand') {
+                        prompt = `Разверни и дополни следующую заметку, добавив больше деталей и идей: "${noteText}"`;
+                    } else {
+                        showAIModal(title, "Неизвестный тип операции AI.", false);
+                        e.currentTarget.disabled = false;
+                        e.currentTarget.textContent = type === 'summarize' ? '✨ Сводка' : '✨ Развернуть';
+                        return;
+                    }
+
+                    try {
+                        const chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
+                        const payload = { contents: chatHistory };
+                        const apiKey = ""; // Этот ключ будет предоставлен Canvas во время выполнения
+                        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                        const response = await fetch(apiUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+
+                        const result = await response.json();
+                        if (result.candidates && result.candidates.length > 0 &&
+                            result.candidates[0].content && result.candidates[0].content.parts &&
+                            result.candidates[0].content.parts.length > 0) {
+                            showAIModal(title, result.candidates[0].content.parts[0].text, false);
+                        } else {
+                            console.error("Ошибка при получении ответа от AI:", result);
+                            showAIModal(title, "Не удалось получить ответ от AI. Попробуйте перефразировать.", false);
+                        }
+                    } catch (error) {
+                        console.error("Ошибка сети при запросе к AI:", error);
+                        showAIModal(title, "Ошибка сети. Проверьте подключение.", false);
+                    } finally {
+                        e.currentTarget.disabled = false;
+                        e.currentTarget.textContent = type === 'summarize' ? '✨ Сводка' : '✨ Развернуть';
+                    }
+                };
+            });
+        }
+
+        function renderAIAssistantTab() {
+            const contentArea = document.getElementById('content-area');
+            contentArea.innerHTML = `
+                <div>
+                    <h2 class="text-3xl font-bold text-amber-400 mb-6 text-center">AI Помощник</h2>
+                    <p class="text-gray-300 mb-6 text-center">
+                        Задавай вопросы и получай советы от своего персонального AI-помощника.
+                    </p>
+                    <div class="flex flex-col gap-4">
+                        <textarea
+                            id="ai-prompt-text"
+                            class="w-full p-3 rounded-lg bg-gray-700 text-white border border-gray-600 focus:outline-none focus:border-amber-500 h-32 resize-y"
+                            placeholder="Задайте свой вопрос AI (например, 'Как мне лучше организовать день для учебы?')"
+                        ></textarea>
+                        <button
+                            id="send-message-to-ai"
+                            class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Спросить AI
+                        </button>
+
+                        <div id="ai-loading-indicator" class="text-center text-gray-400 mt-4 hidden">
+                            AI думает...
+                        </div>
+
+                        <div id="ai-response-display" class="mt-6 p-4 bg-gray-800 rounded-lg shadow-inner border border-amber-600 hidden">
+                            <h3 class="text-xl font-semibold text-amber-300 mb-2">Ответ AI:</h3>
+                            <p id="ai-response-text" class="text-gray-200 whitespace-pre-wrap"></p>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('send-message-to-ai').onclick = async () => {
+                const promptText = document.getElementById('ai-prompt-text').value;
+                const sendButton = document.getElementById('send-message-to-ai');
+                const loadingIndicator = document.getElementById('ai-loading-indicator');
+                const responseDisplay = document.getElementById('ai-response-display');
+                const responseText = document.getElementById('ai-response-text');
+
+                if (!promptText.trim()) {
+                    showMessageModal("Пожалуйста, введите ваш вопрос.");
+                    return;
+                }
+
+                sendButton.disabled = true;
+                loadingIndicator.classList.remove('hidden');
+                responseDisplay.classList.add('hidden');
+                responseText.textContent = '';
+
+                try {
+                    const chatHistory = [{ role: "user", parts: [{ text: promptText }] }];
+                    const payload = { contents: chatHistory };
+                    const apiKey = ""; // Этот ключ будет предоставлен Canvas во время выполнения
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const result = await response.json();
+                    if (result.candidates && result.candidates.length > 0 &&
+                        result.candidates[0].content && result.candidates[0].content.parts &&
+                        result.candidates[0].content.parts.length > 0) {
+                        responseText.textContent = result.candidates[0].content.parts[0].text;
+                        responseDisplay.classList.remove('hidden');
+                    } else {
+                        console.error("Ошибка при получении ответа от AI:", result);
+                        showMessageModal("Не удалось получить ответ от AI. Попробуйте перефразировать.");
+                    }
+                } catch (error) {
+                    console.error("Ошибка сети при запросе к AI:", error);
+                    showMessageModal("Ошибка сети. Проверьте подключение.");
+                } finally {
+                    sendButton.disabled = false;
+                    loadingIndicator.classList.add('hidden');
+                }
+            };
+        }
+
+        // Главная функция рендеринга для переключения вкладок
+        function renderApp() {
+            // Удаляем все предыдущие слушатели событий, чтобы избежать дублирования
+            const contentArea = document.getElementById('content-area');
+            contentArea.innerHTML = ''; // Очищаем содержимое перед рендерингом новой вкладки
+
+            switch (activeTab) {
+                case 'schedule':
+                    renderScheduleTab();
+                    break;
+                case 'shopping':
+                    renderShoppingTab();
+                    break;
+                case 'goals':
+                    renderGoalsTab();
+                    break;
+                case 'family-time':
+                    renderFamilyTimeTab();
+                    break;
+                case 'daily-habits':
+                    renderDailyHabitsTab();
+                    break;
+                case 'learning-progress':
+                    renderLearningProgressTab();
+                    break;
+                case 'finance':
+                    renderFinanceTab();
+                    break;
+                case 'schulte-table':
+                    renderSchulteTableTab();
+                    break;
+                case 'notebook':
+                    renderNotebookTab();
+                    break;
+                case 'ai-assistant':
+                    renderAIAssistantTab();
+                    break;
+                default:
+                    renderScheduleTab(); // По умолчанию показываем расписание
+                    break;
+            }
+            updateTabButtons(); // Обновляем стили кнопок вкладок
+        }
+
+        // Функция для настройки кнопок вкладок и их слушателей
+        function setupTabs() {
+            const navTabs = document.getElementById('nav-tabs');
+            const tabs = [
+                { id: 'schedule', text: 'Расписание', icon: icons.ScheduleIcon },
+                { id: 'shopping', text: 'Покупки', icon: icons.ShoppingCartIcon },
+                { id: 'goals', text: 'Цели', icon: icons.TargetIcon },
+                { id: 'family-time', text: 'Семья', icon: icons.FamilyIcon },
+                { id: 'daily-habits', text: 'Привычки', icon: icons.HabitsIcon },
+                { id: 'learning-progress', text: 'Обучение', icon: icons.LearningIcon },
+                { id: 'finance', text: 'Финансы', icon: icons.FinanceIcon },
+                { id: 'schulte-table', text: 'Шульте', icon: icons.GamepadIcon },
+                { id: 'notebook', text: 'Блокнот', icon: icons.NotebookIcon },
+                { id: 'ai-assistant', text: 'AI Помощник', icon: icons.BrainIcon },
+            ];
+
+            navTabs.innerHTML = tabs.map(tab => `
+                <button
+                    id="tab-${tab.id}"
+                    data-tab="${tab.id}"
+                    class="flex items-center justify-center flex-1 min-w-[120px] py-3 px-4 rounded-full text-lg font-semibold transition-all duration-300 ease-in-out"
+                >
+                    ${tab.icon} ${tab.text}
+                </button>
+            `).join('');
+
+            tabs.forEach(tab => {
+                document.getElementById(`tab-${tab.id}`).addEventListener('click', () => {
+                    activeTab = tab.id;
+                    renderApp();
+                });
+            });
+        }
+
+        // Функция для обновления стилей кнопок вкладок
+        function updateTabButtons() {
+            const navTabs = document.getElementById('nav-tabs');
+            navTabs.querySelectorAll('button').forEach(button => {
+                if (button.dataset.tab === activeTab) {
+                    button.classList.add('bg-amber-600', 'text-white', 'shadow-lg');
+                    button.classList.remove('text-gray-300', 'hover:bg-gray-700');
+                } else {
+                    button.classList.remove('bg-amber-600', 'text-white', 'shadow-lg');
+                    button.classList.add('text-gray-300', 'hover:bg-gray-700');
+                }
+            });
+        }
+
+        // Функция для инициализации Firebase и загрузки данных после успешного входа
+        async function initializeFirebaseAndLoadData() {
+            try {
+                const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+
+                // Инициализация Firebase, если еще не инициализировано
+                if (!app) {
+                    app = initializeApp(firebaseConfig);
+                    db = getFirestore(app);
+                    auth = getAuth(app);
+                }
+
+                // Аутентификация Firebase
+                if (!auth.currentUser) {
+                    try {
+                        if (typeof __initial_auth_token !== 'undefined') {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (error) {
+                        console.error("Ошибка Firebase авторизации:", error);
+                        showMessageModal("Ошибка авторизации Firebase. Некоторые функции могут быть недоступны.");
+                    }
+                }
+                currentUserId = auth.currentUser?.uid || crypto.randomUUID();
+                isAuthReady = true;
+
+                document.getElementById('user-id-value').textContent = currentUserId;
+                document.getElementById('user-id-display').classList.remove('hidden');
+                document.getElementById('logged-in-username-display').textContent = loggedInUsername;
+
+                loadData(); // Загружаем данные для текущего пользователя
+                setupTabs(); // Настраиваем кнопки вкладок
+                renderApp(); // Рендерим приложение
+                setInterval(checkNotifications, 60 * 1000); // Проверять уведомления каждую минуту
+            } catch (error) {
+                console.error("Ошибка инициализации Firebase:", error);
+                showMessageModal("Ошибка инициализации приложения. Пожалуйста, попробуйте перезагрузить страницу.");
+            }
+        }
+
+        // Обработчик входа
+        async function handleLogin() {
+            const usernameInput = document.getElementById('login-username');
+            const passwordInput = document.getElementById('login-password');
+            const errorMessageDisplay = document.getElementById('login-error-message');
+
+            const username = usernameInput.value.trim();
+            const password = passwordInput.value.trim();
+
+            if (userCredentials[username] && userCredentials[username] === password) {
+                loggedInUsername = username;
+                sessionStorage.setItem('loggedInUsername', loggedInUsername); // Сохраняем логин в сессии
+                errorMessageDisplay.classList.add('hidden');
+                document.getElementById('login-screen').classList.add('hidden');
+                document.getElementById('main-app-content').classList.remove('hidden');
+                await initializeFirebaseAndLoadData();
+            } else {
+                errorMessageDisplay.classList.remove('hidden');
+            }
+        }
+
+        // Инициализация при загрузке страницы
+        window.onload = async function() {
+            loggedInUsername = sessionStorage.getItem('loggedInUsername'); // Проверяем, есть ли сохраненный логин
+            if (loggedInUsername) {
+                document.getElementById('login-screen').classList.add('hidden');
+                document.getElementById('main-app-content').classList.remove('hidden');
+                await initializeFirebaseAndLoadData();
+            } else {
+                document.getElementById('login-screen').classList.remove('hidden');
+                document.getElementById('main-app-content').classList.add('hidden');
+            }
+
+            document.getElementById('login-button').onclick = handleLogin;
+            document.getElementById('login-password').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    handleLogin();
+                }
+            });
+        };
+    </script>
+</body>
+</html>
