@@ -91,7 +91,7 @@
             <h1 class="text-4xl sm:text-5xl font-bold text-amber-500 mb-2 drop-shadow-lg">
                 Мой Летний Органайзер
             </h1>
-            <p id="user-id-display" class="text-sm text-gray-400 mt-2 hidden">
+            <p id="user-id-display" class="text-sm text-gray-400 mt-2">
                 ID Пользователя: <span class="font-mono break-all" id="user-id-value"></span>
             </p>
             <p class="text-sm text-gray-400">
@@ -343,14 +343,60 @@
         };
         let activeTab = 'schedule'; // Активная вкладка по умолчанию
 
+        // Function to get initial app state based on loggedInUsername
+        function getInitialAppState(username) {
+            return defaultUserAppData[username] || { // Fallback to empty if username not found in defaults
+                schedule: {},
+                shoppingList: [],
+                goals: [],
+                bananaCount: 0,
+                familyActivities: [],
+                dailyHabits: [],
+                learningSubjects: [],
+                transactions: [],
+                notes: [],
+            };
+        }
+
+        // Function to recursively sanitize data for Firestore
+        function sanitizeForFirestore(data) {
+            if (data === undefined) {
+                return null; // Firestore doesn't like undefined, convert to null
+            }
+            if (Array.isArray(data)) {
+                return data.map(item => sanitizeForFirestore(item));
+            }
+            if (typeof data === 'object' && data !== null) {
+                // Handle Date objects if any, though not explicitly used for saving in this code
+                if (data instanceof Date) {
+                    return data; // Firestore handles Date objects directly
+                }
+                // Recursively sanitize properties of objects
+                const sanitizedObject = {};
+                for (const key in data) {
+                    if (Object.prototype.hasOwnProperty.call(data, key)) {
+                        sanitizedObject[key] = sanitizeForFirestore(data[key]);
+                    }
+                }
+                return sanitizedObject;
+            }
+            return data; // Return primitive types as is
+        }
+
         // Функция для сохранения данных в Firestore
         async function saveData(dataToSave) {
             if (db && currentUserId && loggedInUsername) {
                 try {
-                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                    // Используем appId из глобальной переменной __app_id, или жестко заданный
+                    const appId = "1:549563227859:web:e69f3d7bc2271902e3fe26"; // Ваш App ID
                     // Путь к документу профиля конкретного пользователя
                     const userProfileDocRef = doc(db, `artifacts/${appId}/users/${currentUserId}/profiles/${loggedInUsername}`);
-                    await setDoc(userProfileDocRef, dataToSave, { merge: true });
+
+                    // Sanitize the data before saving
+                    const sanitizedData = sanitizeForFirestore(dataToSave);
+                    console.log("Saving sanitized data:", JSON.stringify(sanitizedData, null, 2)); // For debugging
+
+                    await setDoc(userProfileDocRef, sanitizedData, { merge: true });
                 } catch (e) {
                     console.error("Ошибка при сохранении данных:", e);
                     showMessageModal("Ошибка сохранения данных. Попробуйте снова.");
@@ -362,41 +408,60 @@
 
         // Функция для загрузки данных из Firestore
         function loadData() {
-            if (db && currentUserId && loggedInUsername && isAuthReady) {
-                const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-                const userProfileDocRef = doc(db, `artifacts/${appId}/users/${currentUserId}/profiles/${loggedInUsername}`);
-
-                onSnapshot(userProfileDocRef, (docSnap) => {
-                    if (docSnap.exists()) {
-                        const data = docSnap.data();
-                        // Обновляем appState, используя загруженные данные
-                        Object.assign(appState, {
-                            schedule: data.schedule || defaultUserAppData[loggedInUsername].schedule,
-                            shoppingList: data.shoppingList || [],
-                            goals: data.goals || [],
-                            bananaCount: data.bananaCount || 0,
-                            familyActivities: data.familyActivities || [],
-                            dailyHabits: data.dailyHabits || [],
-                            learningSubjects: data.learningSubjects || [],
-                            transactions: data.transactions || [],
-                            notes: data.notes || [],
-                        });
-                        renderApp(); // Перерисовываем приложение с загруженными данными
-                    } else {
-                        // Если документа профиля нет, создаем его с дефолтными данными для этого пользователя
-                        const initialData = defaultUserAppData[loggedInUsername];
-                        setDoc(userProfileDocRef, initialData)
-                            .then(() => {
-                                Object.assign(appState, initialData);
-                                renderApp();
-                            })
-                            .catch(e => console.error("Ошибка при создании документа профиля пользователя:", e));
-                    }
-                }, (error) => {
-                    console.error("Ошибка при получении данных из Firestore:", error);
-                    showMessageModal("Ошибка загрузки данных. Проверьте подключение.");
-                });
+            // Проверяем, что Firebase и пользователь готовы перед попыткой загрузки данных
+            if (!db || !currentUserId || !loggedInUsername || !isAuthReady) {
+                console.warn("Не удалось загрузить данные: Firebase не готов или пользователь не авторизован.");
+                // Можно показать сообщение пользователю, если это критично
+                // showMessageModal("Приложение не полностью загружено. Пожалуйста, подождите или попробуйте перезагрузить.");
+                return;
             }
+
+            // Используем appId из глобальной переменной __app_id, или жестко заданный
+            const appId = "1:549563227859:web:e69f3d7bc2271902e3fe26"; // Ваш App ID
+            const userProfileDocRef = doc(db, `artifacts/${appId}/users/${currentUserId}/profiles/${loggedInUsername}`);
+
+            // Инициализируем appState дефолтными данными для текущего пользователя *до* начала прослушивания
+            // Это гарантирует, что appState имеет правильную структуру, даже если документ Firestore еще не существует
+            Object.assign(appState, getInitialAppState(loggedInUsername));
+            renderApp(); // Рендерим с начальными дефолтными данными немедленно
+
+            onSnapshot(userProfileDocRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    // Sanitize data immediately after loading from Firestore
+                    const rawData = docSnap.data();
+                    const sanitizedLoadedData = sanitizeForFirestore(rawData); // Apply sanitization here
+
+                    // Объединяем загруженные данные, убеждаясь, что дефолтные значения используются для отсутствующих полей
+                    Object.assign(appState, {
+                        schedule: sanitizedLoadedData.schedule || getInitialAppState(loggedInUsername).schedule,
+                        shoppingList: sanitizedLoadedData.shoppingList || getInitialAppState(loggedInUsername).shoppingList,
+                        goals: sanitizedLoadedData.goals || getInitialAppState(loggedInUsername).goals,
+                        bananaCount: sanitizedLoadedData.bananaCount || getInitialAppState(loggedInUsername).bananaCount,
+                        familyActivities: sanitizedLoadedData.familyActivities || getInitialAppState(loggedInUsername).familyActivities,
+                        dailyHabits: sanitizedLoadedData.dailyHabits || getInitialAppState(loggedInUsername).dailyHabits,
+                        learningSubjects: sanitizedLoadedData.learningSubjects || getInitialAppState(loggedInUsername).learningSubjects,
+                        transactions: sanitizedLoadedData.transactions || getInitialAppState(loggedInUsername).transactions,
+                        notes: sanitizedLoadedData.notes || getInitialAppState(loggedInUsername).notes,
+                    });
+                    renderApp(); // Повторно рендерим с загруженными данными
+                } else {
+                    // Если документ не существует, создаем его с начальными данными для этого пользователя
+                    const initialData = getInitialAppState(loggedInUsername);
+                    // Sanitize initial data before setting it
+                    const sanitizedInitialData = sanitizeForFirestore(initialData);
+                    setDoc(userProfileDocRef, sanitizedInitialData)
+                        .then(() => {
+                            // appState уже инициализировано initialData из вызова выше
+                            // Нет необходимости снова использовать Object.assign, просто убедитесь, что renderApp вызван
+                            renderApp();
+                        })
+                        .catch(e => console.error("Ошибка при создании документа профиля пользователя:", e));
+                }
+            }, (error) => {
+                console.error("Ошибка при получении данных из Firestore:", error);
+                // Более конкретное сообщение об ошибке Firestore
+                showMessageModal(`Ошибка загрузки данных из Firestore: ${error.message}. Убедитесь, что правила безопасности Firestore настроены правильно (например, 'allow read, write: if request.auth != null;').`);
+            });
         }
 
         // --- Функции для управления данными приложения (реплицированы из React App.js) ---
@@ -768,7 +833,8 @@
                         const prompt = `Предложи оптимальное расписание на один день, учитывая следующие задачи и их примерную продолжительность: "${promptText}". Разбей расписание на временные блоки с указанием активности.`;
                         const chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
                         const payload = { contents: chatHistory };
-                        const apiKey = ""; // Этот ключ будет предоставлен Canvas во время выполнения
+                        // API ключ для Gemini API будет предоставлен Canvas во время выполнения
+                        const apiKey = "";
                         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
                         const response = await fetch(apiUrl, {
@@ -788,7 +854,7 @@
                         }
                     } catch (error) {
                         console.error("Ошибка сети при запросе к AI:", error);
-                        showAIModal('Предложенное расписание', "Ошибка сети. Проверьте подключение.", false);
+                        showMessageModal("Ошибка сети. Проверьте подключение.");
                     } finally {
                         generateButton.disabled = false;
                         generateButton.textContent = '✨ Оптимизировать расписание';
@@ -880,7 +946,7 @@
                                             src="${item.image}"
                                             alt="${item.name}"
                                             class="w-20 h-20 object-contain rounded-lg border border-gray-600 shadow-sm mr-4"
-                                            onerror="this.onerror=null;this.src='https://placehold.co/80x80/374151/D1D5DB?text=No+Image';"
+                                            onerror="this.onerror=null;this.src='https://placehold.co/80x80/374151/D1D5DB?text=${encodeURIComponent(item.name || 'Продукт')}';"
                                         />
                                         <div class="flex-grow">
                                             <span class="text-xl font-semibold ${item.completed ? 'line-through text-gray-500' : 'text-amber-300'}">
@@ -929,10 +995,11 @@
 
                 try {
                     // Генерация изображения
-                    addButton.textContent = 'Генерация изображения...';
+                    loadingDiv.textContent = 'Генерация изображения...';
                     const imagePrompt = `A high-quality, realistic photo of ${productName} on a clean white background. Studio lighting, isolated object.`;
                     const imagePayload = { instances: { prompt: imagePrompt }, parameters: { "sampleCount": 1 } };
-                    const apiKey = ""; // Этот ключ будет предоставлен Canvas во время выполнения
+                    // API ключ для Imagen API будет предоставлен Canvas во время выполнения
+                    const apiKey = "";
                     const imageUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
 
                     const imageResponse = await fetch(imageUrl, {
@@ -945,20 +1012,23 @@
                         generatedImage = `data:image/png;base64,${imageResult.predictions[0].bytesBase64Encoded}`;
                     } else {
                         console.error("Ошибка при генерации изображения:", imageResult);
-                        showMessageModal("Не удалось сгенерировать изображение продукта.");
+                        // Вместо showMessageModal, просто используем заглушку, так как это не критичная ошибка
+                        // showMessageModal("Не удалось сгенерировать изображение продукта.");
                     }
                 } catch (error) {
                     console.error("Ошибка при запросе изображения:", error);
-                    showMessageModal("Ошибка сети при генерации изображения. Попробуйте снова.");
+                    // Вместо showMessageModal, просто используем заглушку
+                    // showMessageModal("Ошибка сети при генерации изображения. Попробуйте снова.");
                 }
 
                 try {
                     // Генерация текста (польза и вред)
-                    addButton.textContent = 'Получение инфо...';
+                    loadingDiv.textContent = 'Получение информации о продукте...';
                     const textPrompt = `Предоставь краткую информацию о пользе и вреде продукта "${productName}". Формат: "Польза: [список]. Вред: [список]."`;
                     const chatHistory = [{ role: "user", parts: [{ text: textPrompt }] }];
                     const textPayload = { contents: chatHistory };
-                    const apiKey = ""; // Этот ключ будет предоставлен Canvas во время выполнения
+                    // API ключ для Gemini API будет предоставлен Canvas во время выполнения
+                    const apiKey = "";
                     const textUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
                     const textResponse = await fetch(textUrl, {
@@ -973,20 +1043,21 @@
                         generatedText = textResult.candidates[0].content.parts[0].text;
                     } else {
                         console.error("Ошибка при генерации текста:", textResult);
-                        showMessageModal("Не удалось получить информацию о продукте.");
+                        // showMessageModal("Не удалось получить информацию о продукте.");
                     }
                 } catch (error) {
                     console.error("Ошибка при запросе текста:", error);
-                    showMessageModal("Ошибка сети при получении информации. Попробуйте снова.");
+                    // showMessageModal("Ошибка сети при получении информации. Попробуйте снова.");
                 }
 
                 if (!suggestedPrice) {
-                    addButton.textContent = 'Получение цены...';
+                    loadingDiv.textContent = 'Получение примерной цены...';
                     try {
                         const pricePrompt = `Какова примерная цена "${productName}" в тенге? Укажи только числовое значение.`;
                         const chatHistoryPrice = [{ role: "user", parts: [{ text: pricePrompt }] }];
                         const pricePayload = { contents: chatHistoryPrice };
-                        const apiKey = ""; // Этот ключ будет предоставлен Canvas во время выполнения
+                        // API ключ для Gemini API будет предоставлен Canvas во время выполнения
+                        const apiKey = "";
                         const priceUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
                         const priceResponse = await fetch(priceUrl, {
@@ -1014,31 +1085,30 @@
                     }
                 }
 
-                if (generatedImage || generatedText || suggestedPrice) {
-                    let benefits = "Информация недоступна.";
-                    let harms = "Информация недоступна.";
-                    if (generatedText) {
-                        const benefitMatch = generatedText.match(/Польза:\s*([^.]+)\./i);
-                        const harmMatch = generatedText.match(/Вред:\s*([^.]+)\./i);
-                        if (benefitMatch && benefitMatch[1]) {
-                            benefits = benefitMatch[1].trim();
-                        }
-                        if (harmMatch && harmMatch[1]) {
-                            harms = harmMatch[1].trim();
-                        }
+                let benefits = "Информация недоступна.";
+                let harms = "Информация недоступна.";
+                if (generatedText) {
+                    const benefitMatch = generatedText.match(/Польза:\s*([^.]+)\./i);
+                    const harmMatch = generatedText.match(/Вред:\s*([^.]+)\./i);
+                    if (benefitMatch && benefitMatch[1]) {
+                        benefits = benefitMatch[1].trim();
                     }
-                    addShoppingItem({
-                        name: productName,
-                        quantity: quantity || '1 шт.',
-                        price: suggestedPrice || 'Не указана',
-                        image: generatedImage || 'https://placehold.co/150x150/374151/D1D5DB?text=No+Image',
-                        benefits: benefits,
-                        harms: harms,
-                    });
-                    document.getElementById('product-name').value = '';
-                    document.getElementById('product-quantity').value = '';
-                    document.getElementById('product-price').value = '';
+                    if (harmMatch && harmMatch[1]) {
+                        harms = harmMatch[1].trim();
+                    }
                 }
+                addShoppingItem({
+                    name: productName,
+                    quantity: quantity || '1 шт.',
+                    price: suggestedPrice || 'Не указана',
+                    image: generatedImage || `https://placehold.co/80x80/374151/D1D5DB?text=${encodeURIComponent(productName || 'Продукт')}`, // Fallback to placehold.co
+                    benefits: benefits,
+                    harms: harms,
+                });
+                document.getElementById('product-name').value = '';
+                document.getElementById('product-quantity').value = '';
+                document.getElementById('product-price').value = '';
+                
                 addButton.disabled = false;
                 addButton.textContent = 'Добавить';
                 loadingDiv.classList.add('hidden');
@@ -1060,7 +1130,8 @@
                     const prompt = `Предложи 3-5 простых рецептов, которые можно приготовить, используя следующие ингредиенты: ${ingredients}. Для каждого рецепта укажи название и основные шаги приготовления.`;
                     const chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
                     const payload = { contents: chatHistory };
-                    const apiKey = ""; // Этот ключ будет предоставлен Canvas во время выполнения
+                    // API ключ для Gemini API будет предоставлен Canvas во время выполнения
+                    const apiKey = "";
                     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
                     const response = await fetch(apiUrl, {
@@ -1080,7 +1151,7 @@
                     }
                 } catch (error) {
                     console.error("Ошибка сети при запросе к AI:", error);
-                    showAIModal('Предложенные рецепты', "Ошибка сети. Проверьте подключение.", false);
+                    showMessageModal("Ошибка сети. Проверьте подключение.");
                 } finally {
                     generateButton.disabled = false;
                     generateButton.textContent = '✨ Предложить рецепты';
@@ -1117,7 +1188,7 @@
                         <button
                             id="add-goal-button"
                             class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-6 rounded-r-lg transition duration-300 ease-in-out transform hover:scale-105"
-                        >
+                            >
                             Добавить
                         </button>
                     </div>
@@ -1190,7 +1261,8 @@
                         const prompt = `Сгенерируй подробный план действий для достижения следующей цели: "${goalText}". Разбей его на конкретные шаги, возможно, с указанием сроков или ресурсов.`;
                         const chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
                         const payload = { contents: chatHistory };
-                        const apiKey = ""; // Этот ключ будет предоставлен Canvas во время выполнения
+                        // API ключ для Gemini API будет предоставлен Canvas во время выполнения
+                        const apiKey = "";
                         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
                         const response = await fetch(apiUrl, {
@@ -1210,7 +1282,7 @@
                         }
                     } catch (error) {
                         console.error("Ошибка сети при запросе к AI:", error);
-                        showAIModal(`План действий для цели: "${goalText}"`, "Ошибка сети. Проверьте подключение.", false);
+                        showMessageModal("Ошибка сети. Проверьте подключение.");
                     } finally {
                         e.currentTarget.disabled = false;
                         e.currentTarget.textContent = '✨ Создать план';
@@ -1271,6 +1343,7 @@
                                 ✨ Идеи для семьи
                             </button>
                         </div>
+                        <!-- Удалена секция для генерации историй с AI -->
                     </div>
                     ${appState.familyActivities.length === 0 ? `
                         <p class="text-gray-400 text-center">Пока нет запланированных семейных мероприятий.</p>
@@ -1333,7 +1406,8 @@
                     const prompt = `Предложи 3-5 идей для семейных мероприятий, учитывая следующие предпочтения: "${promptText}".`;
                     const chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
                     const payload = { contents: chatHistory };
-                    const apiKey = ""; // Этот ключ будет предоставлен Canvas во время выполнения
+                    // API ключ для Gemini API будет предоставлен Canvas во время выполнения
+                    const apiKey = "";
                     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
                     const response = await fetch(apiUrl, {
@@ -1353,12 +1427,13 @@
                     }
                 } catch (error) {
                     console.error("Ошибка сети при запросе к AI:", error);
-                    showAIModal('Предложенные идеи для семьи', "Ошибка сети. Проверьте подключение.", false);
+                    showMessageModal("Ошибка сети. Проверьте подключение.");
                 } finally {
                     generateButton.disabled = false;
                     generateButton.textContent = '✨ Идеи для семьи';
                 }
             };
+            // Удален обработчик события для generate-story-button
         }
 
         function renderDailyHabitsTab() {
@@ -1487,7 +1562,8 @@
                     const prompt = `Предложи 3-5 новых полезных привычек, учитывая следующую цель или область улучшения: "${promptText}". Для каждой привычки укажи краткое описание и возможную пользу.`;
                     const chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
                     const payload = { contents: chatHistory };
-                    const apiKey = ""; // Этот ключ будет предоставлен Canvas во время выполнения
+                    // API ключ для Gemini API будет предоставлен Canvas во время выполнения
+                    const apiKey = "";
                     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
                     const response = await fetch(apiUrl, {
@@ -1507,7 +1583,7 @@
                     }
                 } catch (error) {
                     console.error("Ошибка сети при запросе к AI:", error);
-                    showAIModal('Предложенные привычки', "Ошибка сети. Проверьте подключение.", false);
+                    showMessageModal("Ошибка сети. Проверьте подключение.");
                 } finally {
                     generateButton.disabled = false;
                     generateButton.textContent = '✨ Предложить привычки';
@@ -1640,7 +1716,8 @@
                         const prompt = `Сгенерируй 5 вопросов для викторины по теме: "${subjectText}". Каждый вопрос должен быть с вариантами ответов (A, B, C, D) и указанием правильного ответа (например, "Правильный ответ: A").`;
                         const chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
                         const payload = { contents: chatHistory };
-                        const apiKey = ""; // Этот ключ будет предоставлен Canvas во время выполнения
+                        // API ключ для Gemini API будет предоставлен Canvas во время выполнения
+                        const apiKey = "";
                         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
                         const response = await fetch(apiUrl, {
@@ -1660,7 +1737,7 @@
                         }
                     } catch (error) {
                         console.error("Ошибка сети при запросе к AI:", error);
-                        showAIModal(`Вопросы викторины по теме: "${subjectText}"`, "Ошибка сети. Проверьте подключение.", false);
+                        showMessageModal("Ошибка сети. Проверьте подключение.");
                     } finally {
                         e.currentTarget.disabled = false;
                         e.currentTarget.textContent = '✨ Викторина';
@@ -1779,7 +1856,8 @@
                     const prompt = `Проанализируй следующие финансовые транзакции и предложи персонализированные советы по экономии или улучшению финансового положения. Транзакции:\n${transactionSummary}`;
                     const chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
                     const payload = { contents: chatHistory };
-                    const apiKey = ""; // Этот ключ будет предоставлен Canvas во время выполнения
+                    // API ключ для Gemini API будет предоставлен Canvas во время выполнения
+                    const apiKey = "";
                     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
                     const response = await fetch(apiUrl, {
@@ -1799,7 +1877,7 @@
                     }
                 } catch (error) {
                     console.error("Ошибка сети при запросе к AI:", error);
-                    showAIModal('Финансовые советы', "Ошибка сети. Проверьте подключение.", false);
+                    showMessageModal("Ошибка сети. Проверьте подключение.");
                 } finally {
                     generateButton.disabled = false;
                     generateButton.textContent = '✨ Финансовый совет';
@@ -2037,7 +2115,8 @@
                     try {
                         const chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
                         const payload = { contents: chatHistory };
-                        const apiKey = ""; // Этот ключ будет предоставлен Canvas во время выполнения
+                        // API ключ для Gemini API будет предоставлен Canvas во время выполнения
+                        const apiKey = "";
                         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
                         const response = await fetch(apiUrl, {
@@ -2057,7 +2136,7 @@
                         }
                     } catch (error) {
                         console.error("Ошибка сети при запросе к AI:", error);
-                        showAIModal(title, "Ошибка сети. Проверьте подключение.", false);
+                        showMessageModal("Ошибка сети. Проверьте подключение.");
                     } finally {
                         e.currentTarget.disabled = false;
                         e.currentTarget.textContent = type === 'summarize' ? '✨ Сводка' : '✨ Развернуть';
@@ -2119,7 +2198,8 @@
                 try {
                     const chatHistory = [{ role: "user", parts: [{ text: promptText }] }];
                     const payload = { contents: chatHistory };
-                    const apiKey = ""; // Этот ключ будет предоставлен Canvas во время выполнения
+                    // API ключ для Gemini API будет предоставлен Canvas во время выполнения
+                    const apiKey = "";
                     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
                     const response = await fetch(apiUrl, {
@@ -2242,40 +2322,91 @@
 
         // Функция для инициализации Firebase и загрузки данных после успешного входа
         async function initializeFirebaseAndLoadData() {
+            if (!loggedInUsername) {
+                console.error("loggedInUsername не установлен. Невозможно инициализировать Firebase и загрузить данные.");
+                showMessageModal("Ошибка: Неизвестный пользователь. Пожалуйста, войдите снова.");
+                return;
+            }
+
             try {
-                const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-                const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+                // Ваша конфигурация Firebase, предоставленная пользователем
+                const firebaseConfig = {
+                    apiKey: "AIzaSyA-eE8nR65UFcVEOPo5BDSnRzmOcGHBlfw", // Обновленный API ключ
+                    authDomain: "device-streaming-81356708.firebaseapp.com",
+                    projectId: "device-streaming-81356708",
+                    storageBucket: "device-streaming-81356708.firebasestorage.app",
+                    messagingSenderId: "549563227859",
+                    appId: "1:549563227859:web:e69f3d7bc2271902e3fe26"
+                };
+                // Ваш App ID, предоставленный пользователем
+                const appId = "1:549563227859:web:e69f3d7bc2271902e3fe26";
+
+                console.log("Initializing Firebase with config:", firebaseConfig); // Добавлено для отладки
 
                 // Инициализация Firebase, если еще не инициализировано
                 if (!app) {
                     app = initializeApp(firebaseConfig);
                     db = getFirestore(app);
                     auth = getAuth(app);
+                    console.log("Firebase app initialized."); // Добавлено для отладки
                 }
 
                 // Аутентификация Firebase
+                // Проверяем, если пользователь уже аутентифицирован, чтобы избежать повторной попытки
                 if (!auth.currentUser) {
-                    try {
-                        if (typeof __initial_auth_token !== 'undefined') {
+                    let authSuccess = false;
+                    // Используем __initial_auth_token, если он предоставлен Canvas
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token !== null && __initial_auth_token !== '') {
+                        try {
+                            console.log("Attempting signInWithCustomToken..."); // Добавлено для отладки
                             await signInWithCustomToken(auth, __initial_auth_token);
-                        } else {
-                            await signInAnonymously(auth);
+                            authSuccess = true;
+                            console.log("signInWithCustomToken successful."); // Добавлено для отладки
+                        } catch (error) {
+                            console.warn("Пользовательский токен недействителен или вызвал ошибку:", error.code, error.message);
+                            // Продолжаем попытку анонимного входа
                         }
-                    } catch (error) {
-                        console.error("Ошибка Firebase авторизации:", error);
-                        showMessageModal("Ошибка авторизации Firebase. Некоторые функции могут быть недоступны.");
+                    }
+
+                    if (!authSuccess) {
+                        try {
+                            console.log("Attempting signInAnonymously..."); // Добавлено для отладки
+                            await signInAnonymously(auth);
+                            authSuccess = true;
+                            console.log("signInAnonymously successful."); // Добавлено для отладки
+                        } catch (error) {
+                            console.error("Ошибка Firebase авторизации (анонимно):", error);
+                            let errorMessage = "Ошибка анонимной авторизации Firebase. Некоторые функции могут быть недоступны.";
+                            // Обновленное сообщение для ошибки Identity Toolkit API
+                            if (error.code === 'auth/identity-toolkit-api-has-not-been-used-in-project' || error.code === 'auth/anonymous-auth-disabled') {
+                                errorMessage += ` Пожалуйста, убедитесь, что анонимная аутентификация включена в вашем проекте Firebase (Authentication -> Sign-in method -> Anonymous) И что API Identity Toolkit включен в Google Cloud Console по ссылке: https://console.developers.google.com/apis/api/identitytoolkit.googleapis.com/overview?project=574960522306-then-retry.`;
+                            } else if (error.code === 'auth/api-key-not-valid') {
+                                errorMessage += " Ваш API-ключ Firebase недействителен. Пожалуйста, проверьте его в консоли Firebase (Project settings -> API keys) и убедитесь, что он активен и не имеет ограничений (например, по HTTP-реферерам). Возможно, вам потребуется сгенерировать новый ключ.";
+                            }
+                            showMessageModal(errorMessage);
+                        }
+                    }
+
+                    if (!authSuccess) {
+                        // Если и пользовательский токен, и анонимный вход не удались
+                        currentUserId = crypto.randomUUID();
+                        console.warn("Аутентификация не удалась, используется случайный ID пользователя.");
                     }
                 }
-                currentUserId = auth.currentUser?.uid || crypto.randomUUID();
-                isAuthReady = true;
+                // Устанавливаем currentUserId из аутентифицированного пользователя или как случайный UUID
+                currentUserId = auth.currentUser?.uid || currentUserId || crypto.randomUUID();
+                isAuthReady = true; // Устанавливаем в true после попытки аутентификации
+                console.log("Current User ID:", currentUserId); // Добавлено для отладки
 
+                // Обновляем отображение ID пользователя
                 document.getElementById('user-id-value').textContent = currentUserId;
+                // Удаляем класс 'hidden', если он был добавлен ранее (уже удален в HTML, но на всякий случай)
                 document.getElementById('user-id-display').classList.remove('hidden');
-                document.getElementById('logged-in-username-display').textContent = loggedInUsername;
+
 
                 loadData(); // Загружаем данные для текущего пользователя
                 setupTabs(); // Настраиваем кнопки вкладок
-                renderApp(); // Рендерим приложение
+                // renderApp(); // renderApp вызывается внутри loadData после загрузки/инициализации данных
                 setInterval(checkNotifications, 60 * 1000); // Проверять уведомления каждую минуту
             } catch (error) {
                 console.error("Ошибка инициализации Firebase:", error);
@@ -2298,6 +2429,8 @@
                 errorMessageDisplay.classList.add('hidden');
                 document.getElementById('login-screen').classList.add('hidden');
                 document.getElementById('main-app-content').classList.remove('hidden');
+                // Обновляем отображение имени пользователя
+                document.getElementById('logged-in-username-display').textContent = loggedInUsername;
                 await initializeFirebaseAndLoadData();
             } else {
                 errorMessageDisplay.classList.remove('hidden');
@@ -2310,6 +2443,8 @@
             if (loggedInUsername) {
                 document.getElementById('login-screen').classList.add('hidden');
                 document.getElementById('main-app-content').classList.remove('hidden');
+                // Обновляем отображение имени пользователя при загрузке, если пользователь уже вошел
+                document.getElementById('logged-in-username-display').textContent = loggedInUsername;
                 await initializeFirebaseAndLoadData();
             } else {
                 document.getElementById('login-screen').classList.remove('hidden');
